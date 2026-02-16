@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LibrePitch — Free Online Music Visualizer &amp; Audio Editor</title>
+  <meta name="description" content="Free, open-source audio visualizer and editor. Pitch &amp; speed control, Nightcore-style presets, bass/treble EQ, reverb. Visualize with bars, waveform, circular &amp; more. Export WAV or MP3. No sign-up, runs in your browser." />
+  <meta name="keywords" content="LibrePitch, free audio editor, open-source, pitch and speed, nightcore, chopped and screwed, music visualizer, audio visualizer, waveform, spectrum analyzer, export WAV, export MP3, bass treble reverb, browser audio, no sign-up" />
+  <meta name="author" content="LibrePitch" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://librepitch.com/" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="LibrePitch — Free Online Music Visualizer &amp; Audio Editor" />
+  <meta property="og:description" content="Free, open-source audio visualizer. Pitch &amp; speed, Nightcore presets, EQ, reverb. Multiple visual styles. Export WAV/MP3. No sign-up, 100% client-side." />
+  <meta property="og:url" content="https://librepitch.com/" />
+  <meta property="og:site_name" content="LibrePitch" />
+  <meta property="og:locale" content="en_US" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="LibrePitch — Free Online Music Visualizer" />
+  <meta name="twitter:description" content="Free, open-source. Pitch &amp; speed, Nightcore, visualizer. Export WAV/MP3. No sign-up." />
+
+  <!-- Theme & PWA -->
+  <meta name="theme-color" content="#0a0a0f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="LibrePitch" />
+
+  <link rel="stylesheet" href="/src/style.css" />
+  <script src="/lame.min.js"></script>
+
+  <!-- Structured data for search engines -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "LibrePitch",
+    "description": "Free, open-source audio visualizer and editor. Pitch & speed control, Nightcore-style and Chopped & Screwed presets, bass/treble EQ, reverb. Multiple visualization styles (bars, waveform, circular, mirror, line, bubbles, particles). Export WAV or MP3. No sign-up; all processing in your browser.",
+    "url": "https://librepitch.com/",
+    "applicationCategory": "MultimediaApplication",
+    "operatingSystem": "Any",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "featureList": [
+      "Free and open-source",
+      "Pitch and speed control",
+      "Nightcore and Chopped & Screwed presets",
+      "Music visualization (bars, waveform, circular, mirror, line, bubbles, particles)",
+      "Bass and treble EQ",
+      "Reverb and filters",
+      "BPM detection",
+      "Export to WAV or MP3",
+      "Client-side processing — no upload to server"
+    ]
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="app-header-titles">
+        <h1 class="app-title">LibrePitch</h1>
+        <p class="app-tagline" aria-hidden="true">Pitch it. Speed it. Visualize it. All free, in your browser.</p>
+      </div>
+      <div class="header-actions">
+        <button type="button" id="btn-privacy" class="header-action-btn" title="Privacy &amp; data">Privacy</button>
+        <button type="button" id="btn-help" class="header-action-btn" title="How to use">Help</button>
+        <button type="button" id="btn-credits" class="header-action-btn" title="Credits">Credits</button>
+      </div>
+    </header>
+
+    <!-- Main layout -->
+    <main class="app-main">
+      <!-- Left: Visualizer + Upload -->
+      <section class="visualizer-section">
+        <!-- Upload overlay (shown when no file loaded) -->
+        <div id="upload-area" class="upload-area">
+          <input type="file" id="file-input" class="file-input-overlay" accept="audio/*,.m4a,.mp4,.mp3,.wav,.ogg,.flac,.aac,.webm,audio/mp4,audio/x-m4a" />
+          <div class="upload-content">
+            <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <p class="upload-text">Drop an audio file here or click to browse</p>
+            <p class="upload-hint">Supports MP3, WAV, OGG, FLAC, AAC, M4A (only certain M4A codecs)</p>
+          </div>
+        </div>
+
+        <!-- Canvas (hidden until file loaded) -->
+        <canvas id="visualizer-canvas"></canvas>
+
+        <!-- Visualizer style picker -->
+        <div id="style-picker" class="style-picker hidden">
+          <div class="bars-btn-wrap active" id="bars-style-btn">
+            <button type="button" class="style-btn bars-btn-label active" data-style="bars">Bars</button>
+            <button type="button" class="bars-btn-adjust" id="bars-adjust-btn" title="Bar count">&#9652;</button>
+          </div>
+          <button class="style-btn" data-style="mirror">Mirror</button>
+          <button class="style-btn" data-style="line">Line</button>
+          <button class="style-btn" data-style="waveform">Waveform</button>
+          <button class="style-btn" data-style="circular">Circular</button>
+          <button class="style-btn" data-style="bubbles">Bubbles</button>
+          <button class="style-btn" data-style="particles">Particles</button>
+          <button type="button" id="fullscreen-btn" class="fullscreen-btn" title="Toggle fullscreen">
+            <svg class="fullscreen-icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 2 L2 8 M2 2 L8 2 M22 2 L22 8 M22 2 L16 2 M2 22 L2 16 M2 22 L8 22 M22 22 L22 16 M22 22 L16 22"/>
+            </svg>
+            <svg class="fullscreen-icon-exit hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 2 L8 8 L2 8 M16 2 L16 8 L22 8 M2 16 L8 16 L8 22 M22 16 L16 16 L16 22"/>
+            </svg>
+          </button>
+        </div>
+        <!-- Bars count popup (positioned above Bars button via JS) -->
+        <div id="bars-popup" class="bars-popup hidden">
+          <label class="bars-popup-label">
+            <span>Bar Count</span>
+            <span id="bars-count-value" class="bars-count-value">128</span>
+          </label>
+          <input type="range" id="bars-count-slider" class="slider bars-count-slider" min="16" max="512" value="128" step="1" title="Number of bars" />
+        </div>
+      </section>
+
+      <!-- Right: Controls sidebar -->
+      <aside id="controls-panel" class="controls-panel hidden">
+        <!-- Now Playing / Metadata -->
+        <div class="now-playing">
+          <div id="album-art-container" class="album-art-container">
+            <div id="album-art-placeholder" class="album-art-placeholder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </div>
+            <img id="album-art" class="album-art hidden" alt="Album art" />
+          </div>
+          <div class="track-info">
+            <p id="track-title" class="track-title">No track loaded</p>
+            <p id="track-artist" class="track-artist"></p>
+            <p id="track-album" class="track-album"></p>
+          </div>
+        </div>
+
+        <!-- Transport -->
+        <div class="transport-controls">
+          <button id="play-btn" class="play-btn" title="Play/Pause">
+            <svg id="play-icon" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5,3 19,12 5,21"/>
+            </svg>
+            <svg id="pause-icon" class="hidden" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="4" width="4" height="16"/>
+              <rect x="14" y="4" width="4" height="16"/>
+            </svg>
+          </button>
+          <button id="stop-btn" class="stop-btn" title="Stop">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-section">
+          <input type="range" id="progress-bar" class="progress-bar" min="0" max="100" value="0" step="0.1" />
+          <div class="time-display">
+            <span id="current-time">0:00</span>
+            <span id="total-time">0:00</span>
+          </div>
+          <div class="bpm-calculator">
+            <span class="bpm-label">BPM</span>
+            <span id="bpm-value" class="bpm-value">—</span>
+            <button type="button" id="bpm-detect-btn" class="bpm-tap-btn" title="Detect BPM from audio">Detect</button>
+          </div>
+        </div>
+
+        <!-- Presets -->
+        <div class="panel-section">
+          <div class="panel-section-title">Presets</div>
+          <div class="control-group">
+            <div class="preset-grid">
+              <button type="button" class="preset-btn" id="preset-nightcore" title="Faster + higher (1.25×)">Nightcore</button>
+              <button type="button" class="preset-btn preset-btn--wide" id="preset-chopped-screwed" title="Slower + lower (0.85×) with delay reverb">Chopped + Screwed</button>
+              <button type="button" class="preset-btn" id="preset-normal" title="Reset all">Normal</button>
+              <button type="button" class="preset-btn" id="preset-underwater" title="Muffled, other room">Underwater</button>
+              <button type="button" class="preset-btn" id="preset-telephone" title="Tinny, phone filter">Telephone</button>
+              <button type="button" class="preset-btn" id="preset-radio" title="Lo-fi band-pass">Radio</button>
+              <button type="button" class="preset-btn" id="preset-spacious" title="Reverb-heavy">Spacious</button>
+              <button type="button" class="preset-btn" id="preset-vinyl" title="Warm, slight reverb">Vinyl</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Playback -->
+        <div class="panel-section">
+          <div class="panel-section-title">Playback</div>
+          <div class="control-group">
+            <label class="control-label">
+              <span>Speed</span>
+              <span id="speed-value" class="control-value">1.00x</span>
+            </label>
+            <input type="range" id="speed-slider" class="slider" min="0.25" max="2.0" value="1.0" step="0.05" />
+          </div>
+          <div class="control-group">
+            <label class="control-label">
+              <span>Pitch</span>
+              <span id="pitch-value" class="control-value">0 cents</span>
+            </label>
+            <input type="range" id="pitch-slider" class="slider" min="-1200" max="1200" value="0" step="50" />
+          </div>
+        </div>
+
+        <!-- Tone -->
+        <div class="panel-section">
+          <div class="panel-section-title">Tone</div>
+          <div class="control-group">
+            <label class="control-label">
+              <span>Bass</span>
+              <span id="bass-value" class="control-value">0 dB</span>
+            </label>
+            <input type="range" id="bass-slider" class="slider" min="-12" max="12" value="0" step="0.5" />
+          </div>
+          <div class="control-group">
+            <label class="control-label">
+              <span>Treble</span>
+              <span id="treble-value" class="control-value">0 dB</span>
+            </label>
+            <input type="range" id="treble-slider" class="slider" min="-12" max="12" value="0" step="0.5" />
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="panel-section">
+          <div class="panel-section-title">Filters</div>
+          <div class="control-group">
+            <label class="control-label">
+              <span>Low-pass</span>
+              <span id="lowpass-value" class="control-value">0%</span>
+            </label>
+            <input type="range" id="lowpass-slider" class="slider" min="0" max="100" value="0" step="1" title="Muffled / underwater / next room" />
+          </div>
+          <div class="control-group">
+            <label class="control-label">
+              <span>High-pass</span>
+              <span id="highpass-value" class="control-value">0%</span>
+            </label>
+            <input type="range" id="highpass-slider" class="slider" min="0" max="100" value="0" step="1" title="Tinny / telephone" />
+          </div>
+        </div>
+
+        <!-- Effects -->
+        <div class="panel-section">
+          <div class="panel-section-title">Effects</div>
+          <div class="control-group">
+            <label class="control-label">
+              <span>Reverb</span>
+              <span id="reverb-value" class="control-value">0%</span>
+            </label>
+            <div class="reverb-type-row">
+              <button type="button" class="reverb-type-btn active" id="reverb-type-delay" data-reverb-type="delay" title="Delay reverb">Delay</button>
+              <button type="button" class="reverb-type-btn" id="reverb-type-original" data-reverb-type="original" title="Convolution reverb">Convolution</button>
+            </div>
+            <input type="range" id="reverb-slider" class="slider" min="0" max="100" value="0" step="1" />
+          </div>
+        </div>
+
+        <!-- Output -->
+        <div class="panel-section">
+          <div class="panel-section-title">Output</div>
+          <div class="control-group">
+            <label class="control-label">
+              <span>Volume</span>
+              <span id="volume-value" class="control-value">100%</span>
+            </label>
+            <input type="range" id="volume-slider" class="slider" min="0" max="1.5" value="1.0" step="0.01" />
+          </div>
+        </div>
+
+        <!-- Visualizer -->
+        <div class="panel-section">
+          <div class="panel-section-title">Visualizer</div>
+          <div class="control-group">
+            <label class="control-label"><span>Color</span></label>
+            <div class="color-mode-row">
+            <div class="color-mode-btns">
+              <button type="button" class="color-mode-btn active" data-color-mode="default" title="Default gradient">Default</button>
+              <button type="button" class="color-mode-btn" data-color-mode="custom" title="Pick a color">Custom</button>
+              <button type="button" class="color-mode-btn" data-color-mode="changing" title="Cycling colors">Cycle</button>
+              <button type="button" class="color-mode-btn hidden" id="color-mode-album" data-color-mode="album" title="Use album art colors">Album</button>
+            </div>
+            <div id="color-picker-wrap" class="color-picker-wrap hidden">
+              <input type="color" id="visualizer-color" value="#6c5ce7" title="Pick color" />
+            </div>
+          </div>
+        </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="action-buttons">
+          <button id="reset-btn" class="action-btn reset-btn">Reset All</button>
+          <div class="download-dropdown">
+            <button type="button" id="download-dropdown-btn" class="action-btn download-btn download-dropdown-btn" title="Download">
+              <svg class="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <line x1="12" y1="3" x2="12" y2="15"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              </svg>
+              Download
+            </button>
+            <div id="download-dropdown-menu" class="download-dropdown-menu hidden">
+              <button type="button" id="download-wav-item" class="download-dropdown-item">Download WAV</button>
+              <button type="button" id="download-mp3-item" class="download-dropdown-item">Download MP3</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Load new file -->
+        <div class="load-new">
+          <button id="load-new-btn" class="action-btn load-new-btn">Load New File</button>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <!-- Modals -->
+  <div id="modal-privacy" class="modal" role="dialog" aria-labelledby="modal-privacy-title" aria-modal="true" hidden>
+    <div class="modal-overlay"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="modal-privacy-title" class="modal-title">Privacy &amp; Data</h2>
+        <button type="button" class="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <h3>Data privacy</h3>
+        <p>This app runs entirely in your browser. No audio files, metadata, or personal data are sent to any server we operate. Your files never leave your device unless you choose to export them.</p>
+        <h3>Data retention</h3>
+        <p>We do not store, retain, or collect any of your data. There is no server-side storage. Any data (e.g. loaded file, playback state) exists only in your browser session and is cleared when you close the tab or refresh.</p>
+        <h3>Third-party services</h3>
+        <p>When album art or metadata is fetched for display, requests go to third-party APIs (e.g. MusicBrainz, Cover Art Archive). Only the metadata you see (artist, title, album) is sent in search queries. No audio or personal data is shared. Use of those services is subject to their respective privacy policies.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-help" class="modal" role="dialog" aria-labelledby="modal-help-title" aria-modal="true" hidden>
+    <div class="modal-overlay"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="modal-help-title" class="modal-title">Help &amp; Guide</h2>
+        <button type="button" class="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <h3>Getting started</h3>
+        <p>Drop an audio file onto the visualizer area or click to browse. Supported formats: MP3, WAV, OGG, FLAC, AAC, and some M4A files.</p>
+        <h3>Playback</h3>
+        <p>Use <strong>Play/Pause</strong> and <strong>Stop</strong>. Drag the progress bar to seek. The total time reflects the current speed (slower speed = longer runtime).</p>
+        <h3>Effects</h3>
+        <p><strong>Speed</strong> and <strong>Pitch</strong> change playback; <strong>Bass</strong> and <strong>Treble</strong> adjust EQ. <strong>Reset All</strong> restores default settings.</p>
+        <h3>Visualizers</h3>
+        <p>Switch styles with the buttons below the canvas (Bars, Waveform, Circular, Mirror, Line, Bubbles, Particles). Use the fullscreen button for a larger view. Color mode can use a custom color, a cycling palette, or colors from album art (when available).</p>
+        <h3>Export</h3>
+        <p><strong>Download WAV</strong> exports the current audio with all effects applied. <strong>Download MP3</strong> does the same and embeds metadata and album art (from the original file or from the catalog) when possible. Export is not available when playing M4A/MP4 via browser playback only.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-credits" class="modal" role="dialog" aria-labelledby="modal-credits-title" aria-modal="true" hidden>
+    <div class="modal-overlay"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="modal-credits-title" class="modal-title">Credits</h2>
+        <button type="button" class="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <h3>Application</h3>
+        <p>LibrePitch — client-side audio visualization and export.</p>
+        <h3>Libraries &amp; tools</h3>
+        <ul>
+          <li><strong>lamejs</strong> — JavaScript MP3 encoding (LGPL-3.0)</li>
+          <li><strong>mp3tag.js</strong> — ID3 tag read/write</li>
+          <li><strong>Aurora.js / av</strong> — audio decoding (ALAC support)</li>
+          <li><strong>alac</strong> — Apple Lossless decoder for Aurora.js</li>
+          <li><strong>web-audio-beat-detector</strong> — BPM/tempo detection (MIT)</li>
+        </ul>
+        <h3>Data &amp; APIs</h3>
+        <ul>
+          <li><strong>MusicBrainz</strong> — recording and release metadata</li>
+          <li><strong>Cover Art Archive</strong> — album art images</li>
+        </ul>
+        <p class="modal-muted">This app does not collect or store your data. Audio is processed locally in your browser.</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

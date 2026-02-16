@@ -1,0 +1,262 @@
+import type { AudioGraphState } from './graph';
+import { createDelayReverb, createOriginalReverb } from './graph';
+import type { Metadata } from '../metadata/extract';
+import MP3Tag from 'mp3tag.js';
+
+export async function renderAndDownload(
+  buffer: AudioBuffer,
+  state: AudioGraphState,
+  filename: string
+): Promise<void> {
+  const rendered = await renderOffline(buffer, state);
+  const wav = encodeWAV(rendered);
+  triggerDownload(wav, filename);
+}
+
+export interface AlbumArtForExport {
+  mime: string;
+  data: ArrayBuffer;
+}
+
+export async function renderAndDownloadMp3(
+  buffer: AudioBuffer,
+  state: AudioGraphState,
+  filename: string,
+  metadata: Metadata | null,
+  albumArt?: AlbumArtForExport | null
+): Promise<void> {
+  const rendered = await renderOffline(buffer, state);
+  const mp3Buffer = encodeMp3(rendered);
+  const withTags = writeMp3Tags(mp3Buffer, metadata, albumArt ?? null);
+  triggerDownload(new Blob([withTags], { type: 'audio/mpeg' }), filename);
+}
+
+async function renderOffline(
+  buffer: AudioBuffer,
+  state: AudioGraphState
+): Promise<AudioBuffer> {
+  const effectiveRate = state.speed * Math.pow(2, state.detune / 1200);
+  const duration = effectiveRate > 0 ? buffer.duration / effectiveRate : buffer.duration;
+  const sampleRate = buffer.sampleRate;
+  const channels = buffer.numberOfChannels;
+  const totalFrames = Math.ceil(duration * sampleRate);
+
+  const offline = new OfflineAudioContext(channels, totalFrames, sampleRate);
+
+  const source = offline.createBufferSource();
+  source.buffer = buffer;
+  source.playbackRate.value = state.speed;
+  source.detune.value = state.detune;
+
+  const bass = offline.createBiquadFilter();
+  bass.type = 'lowshelf';
+  bass.frequency.value = 320;
+  bass.gain.value = state.bass;
+
+  const treble = offline.createBiquadFilter();
+  treble.type = 'highshelf';
+  treble.frequency.value = 3200;
+  treble.gain.value = state.treble;
+
+  const lowpass = offline.createBiquadFilter();
+  lowpass.type = 'lowpass';
+  lowpass.Q.value = 0.7;
+  const lp = (state.lowpass ?? 0) / 100;
+  lowpass.frequency.value = lp <= 0 ? 20000 : 20000 * Math.pow(2, -6.64 * lp);
+
+  const highpass = offline.createBiquadFilter();
+  highpass.type = 'highpass';
+  highpass.Q.value = 0.7;
+  const hp = (state.highpass ?? 0) / 100;
+  highpass.frequency.value = hp <= 0 ? 20 : 20 * Math.pow(2, 7.64 * hp);
+
+  const dryGain = offline.createGain();
+  const wetGain = offline.createGain();
+  const reverbType = state.reverbType ?? 'delay';
+  if (reverbType === 'delay') {
+    dryGain.gain.value = 1;
+    wetGain.gain.value = (state.reverb / 100) * 0.45;
+  } else {
+    const w = (state.reverb / 100) * 0.5;
+    dryGain.gain.value = 1 - w;
+    wetGain.gain.value = w;
+  }
+
+  const delayReverb = createDelayReverb(offline);
+  const originalReverb = createOriginalReverb(offline);
+  const reverb = reverbType === 'delay' ? delayReverb : originalReverb;
+
+  const gain = offline.createGain();
+  gain.gain.value = state.volume;
+
+  source.connect(bass);
+  bass.connect(treble);
+  treble.connect(lowpass);
+  lowpass.connect(highpass);
+  highpass.connect(dryGain);
+  highpass.connect(delayReverb.send);
+  highpass.connect(originalReverb.send);
+  reverb.bus.connect(wetGain);
+  dryGain.connect(gain);
+  wetGain.connect(gain);
+  gain.connect(offline.destination);
+
+  source.start(0);
+
+  return offline.startRendering();
+}
+
+function encodeWAV(buffer: AudioBuffer): Blob {
+  const channels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const bitsPerSample = 16;
+  const bytesPerSample = bitsPerSample / 8;
+  const blockAlign = channels * bytesPerSample;
+  const totalSamples = buffer.length;
+  const dataSize = totalSamples * blockAlign;
+  const headerSize = 44;
+  const fileSize = headerSize + dataSize;
+
+  const arrayBuffer = new ArrayBuffer(fileSize);
+  const view = new DataView(arrayBuffer);
+
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, fileSize - 8, true);
+  writeString(view, 8, 'WAVE');
+
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  const channelData: Float32Array[] = [];
+  for (let ch = 0; ch < channels; ch++) {
+    channelData.push(buffer.getChannelData(ch));
+  }
+
+  let offset = 44;
+  for (let i = 0; i < totalSamples; i++) {
+    for (let ch = 0; ch < channels; ch++) {
+      let sample = channelData[ch][i];
+      sample = Math.max(-1, Math.min(1, sample));
+      const int16 = sample < 0
+        ? Math.max(-32768, Math.floor(sample * 32768))
+        : Math.min(32767, Math.floor(sample * 32767));
+      view.setInt16(offset, int16, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([arrayBuffer], { type: 'audio/wav' });
+}
+
+function writeString(view: DataView, offset: number, str: string): void {
+  for (let i = 0; i < str.length; i++) {
+    view.setUint8(offset + i, str.charCodeAt(i));
+  }
+}
+
+const MP3_CHUNK = 1152;
+
+function floatToInt16(float32: Float32Array): Int16Array {
+  const int16 = new Int16Array(float32.length);
+  for (let i = 0; i < float32.length; i++) {
+    const s = Math.max(-1, Math.min(1, float32[i]));
+    int16[i] = s < 0 ? Math.max(-32768, Math.floor(s * 32768)) : Math.min(32767, Math.floor(s * 32767));
+  }
+  return int16;
+}
+
+function encodeMp3(buffer: AudioBuffer): ArrayBuffer {
+  const channels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const left = floatToInt16(buffer.getChannelData(0));
+  const right = channels > 1 ? floatToInt16(buffer.getChannelData(1)) : left;
+
+  const lamejs = (window as unknown as { lamejs?: { Mp3Encoder: new (ch: number, sr: number, kbps: number) => { encodeBuffer: (l: Int16Array, r?: Int16Array) => Int8Array; flush: () => Int8Array } } }).lamejs;
+  if (!lamejs?.Mp3Encoder) {
+    throw new Error('MP3 export requires lamejs. Reload the page and try again.');
+  }
+  const encoder = new lamejs.Mp3Encoder(channels, sampleRate, 192);
+  const chunks: Int8Array[] = [];
+  for (let i = 0; i < left.length; i += MP3_CHUNK) {
+    const leftChunk = left.subarray(i, i + MP3_CHUNK);
+    const rightChunk = right.subarray(i, i + MP3_CHUNK);
+    const mp3buf = encoder.encodeBuffer(leftChunk, rightChunk);
+    if (mp3buf.length > 0) chunks.push(mp3buf);
+  }
+  const flush = encoder.flush();
+  if (flush.length > 0) chunks.push(flush);
+
+  const total = chunks.reduce((acc, c) => acc + c.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.length;
+  }
+  return out.buffer;
+}
+
+function writeMp3Tags(
+  mp3Buffer: ArrayBuffer,
+  metadata: Metadata | null,
+  albumArt: AlbumArtForExport | null
+): ArrayBuffer {
+  const hasText =
+    metadata &&
+    (metadata.title?.trim() || metadata.artist?.trim() || metadata.album?.trim() || metadata.year?.trim());
+  const title = metadata?.title?.trim() ?? '';
+  const artist = metadata?.artist?.trim() ?? '';
+  const album = metadata?.album?.trim() ?? '';
+  const year = metadata?.year?.trim() ?? '';
+
+  const v2: Record<string, unknown> = {
+    TIT2: title,
+    TPE1: artist,
+    TALB: album,
+    TDRC: year,
+  };
+
+  if (albumArt && albumArt.data.byteLength > 0) {
+    const mime = albumArt.mime.toLowerCase().includes('png') ? 'image/png' : 'image/jpeg';
+    v2.APIC = [
+      {
+        format: mime,
+        type: 3,
+        description: '',
+        data: Array.from(new Uint8Array(albumArt.data)),
+      },
+    ];
+  }
+
+  const tags = {
+    v1: { title, artist, album, year, comment: '', track: '', genre: '' },
+    v2,
+  };
+
+  if (!hasText && !albumArt) return mp3Buffer;
+
+  return MP3Tag.writeBuffer(mp3Buffer, tags as Parameters<typeof MP3Tag.writeBuffer>[1], {
+    id3v1: { include: true },
+    id3v2: { include: true, version: 4 },
+  }) as ArrayBuffer;
+}
+
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
