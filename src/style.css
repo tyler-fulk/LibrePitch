@@ -105,6 +105,12 @@ body {
   background: var(--bg-tertiary);
 }
 
+a.header-action-btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
 /* === Modals === */
 .modal {
   position: fixed;
@@ -202,6 +208,20 @@ body {
 
 .modal-body li {
   margin-bottom: 0.25em;
+}
+
+.modal-donate {
+  margin-top: 12px;
+  font-size: 0.85em;
+}
+
+.modal-donate a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+}
+
+.modal-donate a:hover {
+  color: var(--text-primary);
 }
 
 .modal-muted {
