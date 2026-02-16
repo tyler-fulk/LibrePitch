@@ -1,7 +1,7 @@
 import { DrawContext } from './types';
 import { getPrimaryColor, toRgba } from './colors';
 
-const NUM_BUBBLES = 28;
+const NUM_BUBBLES = 16;
 const MIN_RADIUS = 20;
 const MAX_RADIUS = 70;
 const BASE_SPEED = 0.8;
@@ -22,9 +22,10 @@ interface Bubble {
 let bubbles: Bubble[] = [];
 let lastW = 0;
 let lastH = 0;
+let lastResizeCounter = -1;
 
 if (typeof document !== 'undefined') {
-  document.addEventListener('fullscreenchange', () => { lastW = 0; lastH = 0; });
+  document.addEventListener('fullscreenchange', () => { lastW = 0; lastH = 0; lastResizeCounter = -1; });
 }
 
 function scale(w: number, h: number): number {
@@ -68,6 +69,11 @@ function getAudioLevel(freq: Uint8Array): { low: number; mid: number; overall: n
 
 export function drawBubbles(dc: DrawContext): void {
   const { ctx, width, height, frequencyData } = dc;
+  if (dc.resizeCounter != null && dc.resizeCounter !== lastResizeCounter) {
+    lastResizeCounter = dc.resizeCounter;
+    lastW = 0;
+    lastH = 0;
+  }
   init(width, height);
 
   const s = scale(width, height);

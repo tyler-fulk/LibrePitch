@@ -7,6 +7,19 @@ function $(id: string): HTMLElement {
   return document.getElementById(id)!;
 }
 
+const CLIPPING_COOKIE = 'librepitch_enable_clipping';
+
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[\]\\/+^])/g, '\\$1') + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function setCookie(name: string, value: string, days: number): void {
+  const d = new Date();
+  d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+  document.cookie = name + '=' + encodeURIComponent(value) + ';expires=' + d.toUTCString() + ';path=/;SameSite=Lax';
+}
+
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
@@ -18,6 +31,8 @@ let progressRafId: number | null = null;
 
 export interface ControlsApi {
   setCurrentAlbumArtUrl(url: string | null): void;
+  setClippingWarning(visible: boolean): void;
+  getClippingCallback(): (visible: boolean) => void;
 }
 
 export function initControls(
@@ -30,7 +45,28 @@ export function initControls(
   let currentAlbumArtUrl: string | null = null;
   const setCurrentAlbumArtUrl = (url: string | null) => {
     currentAlbumArtUrl = url;
+    visualizer.setAlbumArtUrl(url);
   };
+  const clippingWarningEl = document.getElementById('clipping-warning');
+  let clippingCheckEnabled = getCookie(CLIPPING_COOKIE) === '1';
+  const clippingCheckEnableEl = document.getElementById('clipping-check-enable') as HTMLInputElement | null;
+  if (clippingCheckEnableEl) clippingCheckEnableEl.checked = clippingCheckEnabled;
+  const setClippingWarning = (visible: boolean) => {
+    if (visible && !clippingCheckEnabled) return;
+    if (clippingWarningEl) clippingWarningEl.classList.toggle('hidden', !visible);
+  };
+  function effectsApplied(): boolean {
+    const s = graph.getState();
+    return s.speed !== 1 || s.detune !== 0 || s.bass !== 0 || s.treble !== 0 ||
+      s.lowpass !== 0 || s.highpass !== 0 || s.reverb !== 0 || s.volume !== 1;
+  }
+  const getClippingCallback = (): ((visible: boolean) => void) => {
+    return (visible: boolean) => {
+      if (visible && !effectsApplied()) return;
+      setClippingWarning(visible);
+    };
+  };
+  setClippingWarning(false);
   // Abort previous listeners
   if (currentAbort) {
     currentAbort.abort();
@@ -93,12 +129,14 @@ export function initControls(
 
   const styleBtns = document.querySelectorAll<HTMLButtonElement>('.style-btn');
   const barsStyleBtn = $('bars-style-btn');
+  const mirrorStyleBtn = $('mirror-style-btn');
   const barsPopup = $('bars-popup');
   const barsCountSlider = $('bars-count-slider') as HTMLInputElement;
   const barsCountValue = $('bars-count-value');
 
   function updateBarsOptionsVisibility(): void {
-    if (visualizer.getStyle() === 'bars') {
+    const style = visualizer.getStyle();
+    if (style === 'bars' || style === 'mirror') {
       barsCountSlider.value = String(visualizer.getBarCount());
       barsCountValue.textContent = String(visualizer.getBarCount());
     } else {
@@ -106,17 +144,51 @@ export function initControls(
     }
   }
 
-  function positionBarsPopup(): void {
-    const rect = barsStyleBtn.getBoundingClientRect();
-    barsPopup.style.left = `${rect.left + rect.width / 2}px`;
-    barsPopup.style.transform = 'translateX(-50%) translateY(-100%)';
-    barsPopup.style.top = `${rect.top}px`;
-    barsPopup.style.marginTop = '-8px';
+  const POPUP_GAP_ABOVE = 24;
+
+  function positionBarsPopup(anchor?: HTMLElement): void {
+    const el = anchor ?? barsStyleBtn;
+    const rect = el.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Use offsetWidth/offsetHeight to get popup dimensions even when hidden
+    const popupWidth = barsPopup.offsetWidth || 160; // fallback to min-width
+    const popupHeight = barsPopup.offsetHeight || 80; // approximate fallback
+    
+    // Calculate desired position (centered above button)
+    let left = rect.left + rect.width / 2;
+    let top = rect.top;
+    
+    // Clamp left position to keep popup within viewport
+    const popupHalfWidth = popupWidth / 2;
+    const minLeft = popupHalfWidth + 12; // 12px padding from edge
+    const maxLeft = viewportWidth - popupHalfWidth - 12;
+    left = Math.max(minLeft, Math.min(maxLeft, left));
+    
+    // Clamp top position to keep popup visible (at least 8px from top); float well above the bar
+    const minTop = 8;
+    const maxTop = viewportHeight - popupHeight - 8;
+    if (top - popupHeight - POPUP_GAP_ABOVE < minTop) {
+      top = rect.bottom + POPUP_GAP_ABOVE;
+      barsPopup.style.transform = 'translateX(-50%)';
+    } else {
+      top = Math.max(minTop, top - popupHeight - POPUP_GAP_ABOVE);
+      barsPopup.style.transform = 'translateX(-50%) translateY(-100%)';
+    }
+    
+    barsPopup.style.left = `${left}px`;
+    barsPopup.style.top = `${top}px`;
+    barsPopup.style.marginTop = '';
   }
 
   function getEffectiveRate(): number {
     const { speed, detune } = graph.getState();
     return speed * Math.pow(2, detune / 1200);
+  }
+
+  function updateVisualizerPlaybackRate(): void {
+    visualizer.setPlaybackRate(getEffectiveRate());
   }
 
   function getRuntimeDuration(): number {
@@ -139,7 +211,7 @@ export function initControls(
   updateTotalTime();
   progressBar.value = '0';
   currentTimeEl.textContent = '0:00';
-  bpmValueEl.textContent = '—';
+  bpmValueEl.textContent = '-';
   speedSlider.value = '1';
   pitchSlider.value = '0';
   bassSlider.value = '0';
@@ -258,7 +330,7 @@ export function initControls(
   function updateBPMDisplay(): void {
     if (signal.aborted) return;
     if (bpmBase == null) {
-      bpmValueEl.textContent = '—';
+      bpmValueEl.textContent = '-';
       return;
     }
     const speed = graph.getState().speed;
@@ -276,7 +348,7 @@ export function initControls(
       updateBPMDisplay();
     } catch (err) {
       if (!signal.aborted) {
-        bpmValueEl.textContent = '—';
+        bpmValueEl.textContent = '-';
         showStatus('BPM detection failed.', 'error');
       }
     } finally {
@@ -314,6 +386,7 @@ export function initControls(
     pitchValue.textContent = `${clamped > 0 ? '+' : ''}${clamped} cents`;
     updateTotalTime();
     updateBPMDisplay();
+    updateVisualizerPlaybackRate();
   }
 
   function syncSpeedFromPitch(detuneCents: number) {
@@ -326,6 +399,7 @@ export function initControls(
     pitchValue.textContent = `${detuneCents > 0 ? '+' : ''}${detuneCents} cents`;
     updateTotalTime();
     updateBPMDisplay();
+    updateVisualizerPlaybackRate();
   }
 
   function resetSpeedPitch() {
@@ -337,26 +411,42 @@ export function initControls(
     pitchValue.textContent = '0 cents';
     updateTotalTime();
     updateBPMDisplay();
+    updateVisualizerPlaybackRate();
   }
 
   // Speed (drives pitch via turntable link)
   speedSlider.addEventListener('input', () => {
+    clearClippingWarning();
     const speed = parseFloat(speedSlider.value);
     syncPitchFromSpeed(speed);
   }, { signal });
   speedSlider.addEventListener('dblclick', (e) => {
     e.preventDefault();
+    clearClippingWarning();
     resetSpeedPitch();
   }, { signal });
 
   // Pitch (drives speed via turntable link)
   pitchSlider.addEventListener('input', () => {
+    clearClippingWarning();
     const detune = parseInt(pitchSlider.value, 10);
     syncSpeedFromPitch(detune);
   }, { signal });
   pitchSlider.addEventListener('dblclick', (e) => {
     e.preventDefault();
+    clearClippingWarning();
     resetSpeedPitch();
+  }, { signal });
+
+  function clearClippingWarning(): void {
+    visualizer.resetClippingState();
+    setClippingWarning(false);
+  }
+
+  clippingCheckEnableEl?.addEventListener('change', () => {
+    clippingCheckEnabled = clippingCheckEnableEl.checked;
+    setCookie(CLIPPING_COOKIE, clippingCheckEnabled ? '1' : '0', 365);
+    if (!clippingCheckEnabled) setClippingWarning(false);
   }, { signal });
 
   // Full preset: sets graph and every slider (including volume) so UI and sound stay in sync.
@@ -370,6 +460,7 @@ export function initControls(
     reverbType: 'delay' | 'original',
     volume: number = 1
   ) {
+    clearClippingWarning();
     const detuneClamped = Math.max(PITCH_MIN, Math.min(PITCH_MAX, Math.round(1200 * Math.log2(speed))));
     graph.setSpeed(speed);
     graph.setDetune(detuneClamped);
@@ -400,6 +491,7 @@ export function initControls(
     reverbTypeOriginalBtn.classList.toggle('active', reverbType === 'original');
     updateTotalTime();
     updateBPMDisplay();
+    updateVisualizerPlaybackRate();
   }
 
   // Reset all controls to default. Normal preset and Reset button both use this.
@@ -434,6 +526,7 @@ export function initControls(
 
   // Bass
   bassSlider.addEventListener('input', () => {
+    clearClippingWarning();
     const val = parseFloat(bassSlider.value);
     graph.setBass(val);
     bassValue.textContent = `${val > 0 ? '+' : ''}${val.toFixed(1)} dB`;
@@ -447,6 +540,7 @@ export function initControls(
 
   // Treble
   trebleSlider.addEventListener('input', () => {
+    clearClippingWarning();
     const val = parseFloat(trebleSlider.value);
     graph.setTreble(val);
     trebleValue.textContent = `${val > 0 ? '+' : ''}${val.toFixed(1)} dB`;
@@ -460,6 +554,7 @@ export function initControls(
 
   // Low-pass (muffled / underwater / other room)
   lowpassSlider.addEventListener('input', () => {
+    clearClippingWarning();
     const val = parseInt(lowpassSlider.value, 10);
     graph.setLowpass(val);
     lowpassValue.textContent = `${val}%`;
@@ -473,6 +568,7 @@ export function initControls(
 
   // High-pass (tinny / telephone)
   highpassSlider.addEventListener('input', () => {
+    clearClippingWarning();
     const val = parseInt(highpassSlider.value, 10);
     graph.setHighpass(val);
     highpassValue.textContent = `${val}%`;
@@ -486,16 +582,19 @@ export function initControls(
 
   // Reverb
   reverbTypeDelayBtn.addEventListener('click', () => {
+    clearClippingWarning();
     graph.setReverbType('delay');
     reverbTypeDelayBtn.classList.add('active');
     reverbTypeOriginalBtn.classList.remove('active');
   }, { signal });
   reverbTypeOriginalBtn.addEventListener('click', () => {
+    clearClippingWarning();
     graph.setReverbType('original');
     reverbTypeOriginalBtn.classList.add('active');
     reverbTypeDelayBtn.classList.remove('active');
   }, { signal });
   reverbSlider.addEventListener('input', () => {
+    clearClippingWarning();
     const val = parseInt(reverbSlider.value, 10);
     graph.setReverb(val);
     reverbValue.textContent = `${val}%`;
@@ -509,12 +608,14 @@ export function initControls(
 
   // Volume
   volumeSlider.addEventListener('input', () => {
+    clearClippingWarning();
     const val = parseFloat(volumeSlider.value);
     graph.setVolume(val);
     volumeValue.textContent = `${Math.round(val * 100)}%`;
   }, { signal });
   volumeSlider.addEventListener('dblclick', (e) => {
     e.preventDefault();
+    clearClippingWarning();
     volumeSlider.value = '1';
     graph.setVolume(1);
     volumeValue.textContent = '100%';
@@ -627,11 +728,13 @@ export function initControls(
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       styleBtns.forEach((b) => b.classList.remove('active'));
+      document.querySelectorAll('.bars-btn-wrap').forEach((w) => w.classList.remove('active'));
       btn.classList.add('active');
-      barsStyleBtn.classList.toggle('active', btn.dataset.style === 'bars');
       const style = btn.dataset.style as VisualizerStyle;
+      if (style === 'bars') barsStyleBtn.classList.add('active');
+      else if (style === 'mirror') mirrorStyleBtn.classList.add('active');
       visualizer.setStyle(style);
-      if (style !== 'bars') barsPopup.classList.add('hidden');
+      if (style !== 'bars' && style !== 'mirror') barsPopup.classList.add('hidden');
       updateBarsOptionsVisibility();
     }, { signal });
   });
@@ -641,7 +744,14 @@ export function initControls(
   barsAdjustBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     barsPopup.classList.toggle('hidden');
-    if (!barsPopup.classList.contains('hidden')) positionBarsPopup();
+    if (!barsPopup.classList.contains('hidden')) positionBarsPopup(barsStyleBtn);
+  }, { signal });
+
+  const mirrorAdjustBtn = document.querySelector('.mirror-adjust-btn');
+  mirrorAdjustBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    barsPopup.classList.toggle('hidden');
+    if (!barsPopup.classList.contains('hidden')) positionBarsPopup(mirrorStyleBtn);
   }, { signal });
 
   barsPopup.addEventListener('click', (e) => e.stopPropagation());
@@ -686,7 +796,9 @@ export function initControls(
     visualizer.setCustomColor(colorPicker.value);
   }, { signal });
 
-  return { setCurrentAlbumArtUrl };
+  updateVisualizerPlaybackRate();
+
+  return { setCurrentAlbumArtUrl, setClippingWarning, getClippingCallback };
 }
 
 export function updateMetadataUI(

@@ -5,7 +5,8 @@ export function drawMirror(dc: DrawContext): void {
   const { ctx, width, height, frequencyData } = dc;
   const len = frequencyData.length;
   const effectiveLen = dc.frequencyEndIndex != null ? Math.min(dc.frequencyEndIndex, len) : len;
-  const barCount = Math.min(effectiveLen, 128);
+  const requestedBars = dc.barCount ?? 128;
+  const barCount = Math.min(effectiveLen, Math.max(16, Math.min(512, requestedBars)));
   const step = Math.max(1, Math.floor(effectiveLen / barCount));
   const barWidth = width / barCount;
   const gap = Math.max(1, barWidth * 0.15);

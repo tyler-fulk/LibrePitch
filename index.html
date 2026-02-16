@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LibrePitch — Free Online Music Visualizer &amp; Audio Editor</title>
+  <title>LibrePitch - Free Online Music Visualizer &amp; Audio Editor</title>
   <meta name="description" content="Free, open-source audio visualizer and editor. Pitch &amp; speed control, Nightcore-style presets, bass/treble EQ, reverb. Visualize with bars, waveform, circular &amp; more. Export WAV or MP3. No sign-up, runs in your browser." />
   <meta name="keywords" content="LibrePitch, free audio editor, open-source, pitch and speed, nightcore, chopped and screwed, music visualizer, audio visualizer, waveform, spectrum analyzer, export WAV, export MP3, bass treble reverb, browser audio, no sign-up" />
   <meta name="author" content="LibrePitch" />
@@ -13,7 +13,7 @@
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="LibrePitch — Free Online Music Visualizer &amp; Audio Editor" />
+  <meta property="og:title" content="LibrePitch - Free Online Music Visualizer &amp; Audio Editor" />
   <meta property="og:description" content="Free, open-source audio visualizer. Pitch &amp; speed, Nightcore presets, EQ, reverb. Multiple visual styles. Export WAV/MP3. No sign-up, 100% client-side." />
   <meta property="og:url" content="https://librepitch.com/" />
   <meta property="og:site_name" content="LibrePitch" />
@@ -21,7 +21,7 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="LibrePitch — Free Online Music Visualizer" />
+  <meta name="twitter:title" content="LibrePitch - Free Online Music Visualizer" />
   <meta name="twitter:description" content="Free, open-source. Pitch &amp; speed, Nightcore, visualizer. Export WAV/MP3. No sign-up." />
 
   <!-- Theme & PWA -->
@@ -52,7 +52,7 @@
       "Reverb and filters",
       "BPM detection",
       "Export to WAV or MP3",
-      "Client-side processing — no upload to server"
+      "Client-side processing - no upload to server"
     ]
   }
   </script>
@@ -100,12 +100,16 @@
             <button type="button" class="style-btn bars-btn-label active" data-style="bars">Bars</button>
             <button type="button" class="bars-btn-adjust" id="bars-adjust-btn" title="Bar count">&#9652;</button>
           </div>
-          <button class="style-btn" data-style="mirror">Mirror</button>
+          <div class="bars-btn-wrap" id="mirror-style-btn">
+            <button type="button" class="style-btn bars-btn-label" data-style="mirror">Mirror</button>
+            <button type="button" class="bars-btn-adjust mirror-adjust-btn" title="Bar count">&#9652;</button>
+          </div>
           <button class="style-btn" data-style="line">Line</button>
           <button class="style-btn" data-style="waveform">Waveform</button>
           <button class="style-btn" data-style="circular">Circular</button>
           <button class="style-btn" data-style="bubbles">Bubbles</button>
           <button class="style-btn" data-style="particles">Particles</button>
+          <button class="style-btn" data-style="vinyl">Vinyl</button>
           <button type="button" id="fullscreen-btn" class="fullscreen-btn" title="Toggle fullscreen">
             <svg class="fullscreen-icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M2 2 L2 8 M2 2 L8 2 M22 2 L22 8 M22 2 L16 2 M2 22 L2 16 M2 22 L8 22 M22 22 L22 16 M22 22 L16 22"/>
@@ -129,7 +133,7 @@
       <aside id="controls-panel" class="controls-panel hidden">
         <!-- Now Playing / Metadata -->
         <div class="now-playing">
-          <div id="album-art-container" class="album-art-container">
+          <div id="album-art-container" class="album-art-container" title="Change song" role="button" tabindex="0">
             <div id="album-art-placeholder" class="album-art-placeholder">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <circle cx="12" cy="12" r="10"/>
@@ -137,6 +141,13 @@
               </svg>
             </div>
             <img id="album-art" class="album-art hidden" alt="Album art" />
+            <div class="album-art-overlay" aria-hidden="true">
+              <svg class="album-art-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+            </div>
           </div>
           <div class="track-info">
             <p id="track-title" class="track-title">No track loaded</p>
@@ -172,8 +183,18 @@
           </div>
           <div class="bpm-calculator">
             <span class="bpm-label">BPM</span>
-            <span id="bpm-value" class="bpm-value">—</span>
+            <span id="bpm-value" class="bpm-value">-</span>
             <button type="button" id="bpm-detect-btn" class="bpm-tap-btn" title="Detect BPM from audio">Detect</button>
+          </div>
+          <label class="clipping-check-option">
+            <span class="clipping-check-wrap">
+              <input type="checkbox" id="clipping-check-enable" title="Show clipping warning when detected" />
+              <span class="clipping-check-mark" aria-hidden="true"></span>
+            </span>
+            <span>Check for Clipping</span>
+          </label>
+          <div id="clipping-warning" class="clipping-warning hidden" role="status" aria-live="polite">
+            Clipping detected - Alter effects to reduce
           </div>
         </div>
 
@@ -359,7 +380,7 @@
         <h3>Effects</h3>
         <p><strong>Speed</strong> and <strong>Pitch</strong> change playback; <strong>Bass</strong> and <strong>Treble</strong> adjust EQ. <strong>Reset All</strong> restores default settings.</p>
         <h3>Visualizers</h3>
-        <p>Switch styles with the buttons below the canvas (Bars, Waveform, Circular, Mirror, Line, Bubbles, Particles). Use the fullscreen button for a larger view. Color mode can use a custom color, a cycling palette, or colors from album art (when available).</p>
+        <p>Switch styles with the buttons below the canvas (Bars, Waveform, Circular, Mirror, Line, Bubbles, Particles, Vinyl). Use the fullscreen button for a larger view. Color mode can use a custom color, a cycling palette, or colors from album art (when available). The Vinyl style rotates with playback speed and shows album art in the center when loaded.</p>
         <h3>Export</h3>
         <p><strong>Download WAV</strong> exports the current audio with all effects applied. <strong>Download MP3</strong> does the same and embeds metadata and album art (from the original file or from the catalog) when possible. Export is not available when playing M4A/MP4 via browser playback only.</p>
       </div>
@@ -375,19 +396,19 @@
       </div>
       <div class="modal-body">
         <h3>Application</h3>
-        <p>LibrePitch — client-side audio visualization and export.</p>
+        <p>LibrePitch - client-side audio visualization and export.</p>
         <h3>Libraries &amp; tools</h3>
         <ul>
-          <li><strong>lamejs</strong> — JavaScript MP3 encoding (LGPL-3.0)</li>
-          <li><strong>mp3tag.js</strong> — ID3 tag read/write</li>
-          <li><strong>Aurora.js / av</strong> — audio decoding (ALAC support)</li>
-          <li><strong>alac</strong> — Apple Lossless decoder for Aurora.js</li>
-          <li><strong>web-audio-beat-detector</strong> — BPM/tempo detection (MIT)</li>
+          <li><strong>lamejs</strong> - JavaScript MP3 encoding (LGPL-3.0)</li>
+          <li><strong>mp3tag.js</strong> - ID3 tag read/write</li>
+          <li><strong>Aurora.js / av</strong> - audio decoding (ALAC support)</li>
+          <li><strong>alac</strong> - Apple Lossless decoder for Aurora.js</li>
+          <li><strong>web-audio-beat-detector</strong> - BPM/tempo detection (MIT)</li>
         </ul>
         <h3>Data &amp; APIs</h3>
         <ul>
-          <li><strong>MusicBrainz</strong> — recording and release metadata</li>
-          <li><strong>Cover Art Archive</strong> — album art images</li>
+          <li><strong>MusicBrainz</strong> - recording and release metadata</li>
+          <li><strong>Cover Art Archive</strong> - album art images</li>
         </ul>
         <p class="modal-muted">This app does not collect or store your data. Audio is processed locally in your browser.</p>
         <p class="modal-muted modal-donate">Help with hosting: <a href="https://ko-fi.com/tylerfulk" target="_blank" rel="noopener noreferrer">Ko-fi</a></p>

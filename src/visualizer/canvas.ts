@@ -7,6 +7,7 @@ import { drawMirror } from './mirror';
 import { drawLine } from './line';
 import { drawBubbles } from './bubbles';
 import { drawParticles } from './particles';
+import { drawVinyl } from './vinyl';
 
 const styleMap: Record<VisualizerStyle, DrawFunction> = {
   bars: drawBars,
@@ -16,6 +17,7 @@ const styleMap: Record<VisualizerStyle, DrawFunction> = {
   circular: drawCircular,
   bubbles: drawBubbles,
   particles: drawParticles,
+  vinyl: drawVinyl,
 };
 
 export class Visualizer {
@@ -29,6 +31,16 @@ export class Visualizer {
   private resizeObserver: ResizeObserver;
   private colorOptions: VisualizerColorOptions = getDefaultColorOptions();
   private barCount = 128;
+  private resizeCounter = 0;
+  private playbackRate = 1;
+  private albumArtUrl: string | null = null;
+  private onClipping: ((clipping: boolean) => void) | null = null;
+  private clippingFrames = 0;
+  private noClipFrames = 0;
+  private lastReportedClipping = false;
+  private readonly CLIPPING_THRESHOLD = 0.025; // fraction of samples at hard ceiling/floor to consider clipping
+  private readonly CLIPPING_ON_FRAMES = 6;
+  private readonly CLIPPING_OFF_FRAMES = 10;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -41,13 +53,12 @@ export class Visualizer {
   private resize(): void {
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
+    this.resizeCounter += 1;
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = rect.width * dpr;
     this.canvas.height = rect.height * dpr;
     this.canvas.style.width = `${rect.width}px`;
-    if (!document.fullscreenElement) {
-      this.canvas.style.height = `${rect.height}px`;
-    }
+    this.canvas.style.height = `${rect.height}px`;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
@@ -90,6 +101,25 @@ export class Visualizer {
     this.colorOptions.albumArtColors = colors;
   }
 
+  setPlaybackRate(rate: number): void {
+    this.playbackRate = rate;
+  }
+
+  setAlbumArtUrl(url: string | null): void {
+    this.albumArtUrl = url;
+  }
+
+  setOnClipping(cb: (clipping: boolean) => void): void {
+    this.onClipping = cb;
+  }
+
+  /** Reset clipping state so the warning can be shown again after user clears it. */
+  resetClippingState(): void {
+    this.clippingFrames = 0;
+    this.noClipFrames = 0;
+    this.lastReportedClipping = false;
+  }
+
   start(): void {
     if (this.animationId !== null) return;
     this.loop();
@@ -121,6 +151,30 @@ export class Visualizer {
     this.analyser.getByteFrequencyData(this.frequencyData);
     this.analyser.getByteTimeDomainData(this.timeDomainData);
 
+    if (this.onClipping && this.timeDomainData.length > 0) {
+      let clipCount = 0;
+      for (let i = 0; i < this.timeDomainData.length; i++) {
+        const v = this.timeDomainData[i];
+        if (v === 0 || v === 255) clipCount += 1;
+      }
+      const clipRatio = clipCount / this.timeDomainData.length;
+      if (clipRatio >= this.CLIPPING_THRESHOLD) {
+        this.clippingFrames = Math.min(this.CLIPPING_ON_FRAMES, this.clippingFrames + 1);
+        this.noClipFrames = 0;
+        if (this.clippingFrames >= this.CLIPPING_ON_FRAMES && !this.lastReportedClipping) {
+          this.lastReportedClipping = true;
+          this.onClipping(true);
+        }
+      } else {
+        this.noClipFrames = Math.min(this.CLIPPING_OFF_FRAMES, this.noClipFrames + 1);
+        if (this.noClipFrames >= this.CLIPPING_OFF_FRAMES) {
+          this.clippingFrames = 0;
+          this.lastReportedClipping = false;
+          // Do not call onClipping(false) - warning stays until user changes volume or other controls
+        }
+      }
+    }
+
     if (this.colorOptions.mode === 'changing') {
       this.colorOptions.colorPhase = (this.colorOptions.colorPhase + 0.004) % 1;
     }
@@ -133,7 +187,9 @@ export class Visualizer {
       timeDomainData: this.timeDomainData,
       analyser: this.analyser,
       colorOptions: { ...this.colorOptions },
-      ...(this.style === 'bars' && { barCount: this.barCount }),
+      resizeCounter: this.resizeCounter,
+      ...((this.style === 'bars' || this.style === 'mirror') && { barCount: this.barCount }),
+      ...(this.style === 'vinyl' && { playbackRate: this.playbackRate, albumArtUrl: this.albumArtUrl }),
     };
 
     const drawFn = styleMap[this.style];

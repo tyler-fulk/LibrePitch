@@ -27,6 +27,7 @@ function init(): void {
   setupDragDrop();
   setupGlobalDragDrop();
   setupLoadNew();
+  setupAlbumArtChangeSong();
   setupFullscreen();
   setupKeyboard();
   setupModals();
@@ -73,6 +74,9 @@ function setupFullscreen(): void {
   const iconExit = btn?.querySelector('.fullscreen-icon-exit');
   if (!btn || !visualizerSection) return;
 
+  // Detect touch capability
+  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
   const BAR_HIDE_DELAY_MS = 3000;
   const MOVE_THRESHOLD_PX = 3;
   let barHideTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -104,21 +108,28 @@ function setupFullscreen(): void {
     stylePicker.style.pointerEvents = 'none';
     canvas.style.transition = 'bottom 0.35s ease';
     canvas.style.bottom = '0';
+    canvas.style.height = `${window.innerHeight}px`;
+    requestAnimationFrame(() => visualizer?.updateSize());
   }
 
   function showBar(): void {
     if (barVisible) { scheduleBarHide(); return; }
     barVisible = true;
+    barHeight = getBarHeight();
     stylePicker.style.transition = 'transform 0.35s ease';
     stylePicker.style.transform = 'translateY(0)';
     stylePicker.style.pointerEvents = 'auto';
     canvas.style.transition = 'bottom 0.35s ease';
     canvas.style.bottom = `${barHeight}px`;
+    canvas.style.height = `${Math.max(1, window.innerHeight - barHeight)}px`;
+    requestAnimationFrame(() => visualizer?.updateSize());
     scheduleBarHide();
   }
 
   function scheduleBarHide(): void {
     clearHideTimer();
+    // On touch devices, keep bar always visible
+    if (isTouchDevice) return;
     barHideTimeout = window.setTimeout(() => {
       if (isFullscreenActive()) hideBar();
     }, BAR_HIDE_DELAY_MS);
@@ -143,19 +154,20 @@ function setupFullscreen(): void {
     canvas.style.height = '';
   }
 
-  function onMouseMove(e: MouseEvent): void {
+  function onMouseMove(e: Event): void {
     if (!isFullscreenActive()) return;
+    const me = e as MouseEvent;
     if (Number.isNaN(lastMoveX) || Number.isNaN(lastMoveY)) {
-      lastMoveX = e.clientX;
-      lastMoveY = e.clientY;
+      lastMoveX = me.clientX;
+      lastMoveY = me.clientY;
       showBar();
       return;
     }
-    const dx = e.clientX - lastMoveX;
-    const dy = e.clientY - lastMoveY;
+    const dx = me.clientX - lastMoveX;
+    const dy = me.clientY - lastMoveY;
     if (dx * dx + dy * dy < MOVE_THRESHOLD_PX * MOVE_THRESHOLD_PX) return;
-    lastMoveX = e.clientX;
-    lastMoveY = e.clientY;
+    lastMoveX = me.clientX;
+    lastMoveY = me.clientY;
     showBar();
   }
 
@@ -185,7 +197,7 @@ function setupFullscreen(): void {
     const isFs = isFullscreenActive();
     iconExpand?.classList.toggle('hidden', isFs);
     iconExit?.classList.toggle('hidden', !isFs);
-    btn.setAttribute('title', isFs ? 'Exit fullscreen' : 'Fullscreen');
+    btn?.setAttribute('title', isFs ? 'Exit fullscreen' : 'Fullscreen');
     const el = visualizerSection as HTMLElement;
     if (isFs) {
       document.body.classList.add('fullscreen-active');
@@ -210,16 +222,35 @@ function setupFullscreen(): void {
       canvas.style.bottom = `${barHeight}px`;
       canvas.style.width = '100%';
       canvas.style.height = '';
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => visualizer?.updateSize());
+      const applyFullscreenCanvasSize = (): void => {
+        const h = barVisible ? getBarHeight() : 0;
+        const canvasW = window.innerWidth;
+        const canvasH = Math.max(1, window.innerHeight - h);
+        canvas.style.width = `${canvasW}px`;
+        canvas.style.height = `${canvasH}px`;
+        visualizer?.updateSize();
+      };
+      const fullscreenResizeObserver = new ResizeObserver(() => {
+        applyFullscreenCanvasSize();
+        fullscreenResizeObserver.disconnect();
       });
-      scheduleBarHide();
-      lastMoveX = Number.NaN;
-      lastMoveY = Number.NaN;
-      visualizerSection.addEventListener('mousemove', onMouseMove);
-      visualizerSection.addEventListener('mouseenter', onMouseEnter);
-      visualizerSection.addEventListener('mouseleave', onMouseLeave);
-      visualizerSection.addEventListener('click', onInteraction);
+      fullscreenResizeObserver.observe(visualizerSection);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(applyFullscreenCanvasSize);
+      });
+      // On touch devices, keep bar always visible; on desktop, schedule auto-hide
+      if (isTouchDevice) {
+        // Keep bar visible, don't schedule hide
+        showBar();
+      } else {
+        scheduleBarHide();
+        lastMoveX = Number.NaN;
+        lastMoveY = Number.NaN;
+        visualizerSection.addEventListener('mousemove', onMouseMove);
+        visualizerSection.addEventListener('mouseenter', onMouseEnter);
+        visualizerSection.addEventListener('mouseleave', onMouseLeave);
+        visualizerSection.addEventListener('click', onInteraction);
+      }
       window.addEventListener('blur', onWindowBlur);
     } else {
       document.body.classList.remove('fullscreen-active');
@@ -230,14 +261,24 @@ function setupFullscreen(): void {
       el.style.height = '';
       el.style.minWidth = '';
       el.style.minHeight = '';
+      canvas.style.position = '';
+      canvas.style.top = '';
+      canvas.style.left = '';
+      canvas.style.right = '';
+      canvas.style.bottom = '';
       canvas.style.width = '';
       canvas.style.height = '';
       clearHideTimer();
       resetBarStyles();
-      visualizerSection.removeEventListener('mousemove', onMouseMove);
-      visualizerSection.removeEventListener('mouseenter', onMouseEnter);
-      visualizerSection.removeEventListener('mouseleave', onMouseLeave);
-      visualizerSection.removeEventListener('click', onInteraction);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => visualizer?.updateSize());
+      });
+      if (!isTouchDevice) {
+        visualizerSection.removeEventListener('mousemove', onMouseMove);
+        visualizerSection.removeEventListener('mouseenter', onMouseEnter);
+        visualizerSection.removeEventListener('mouseleave', onMouseLeave);
+        visualizerSection.removeEventListener('click', onInteraction);
+      }
       window.removeEventListener('blur', onWindowBlur);
     }
   }
@@ -248,8 +289,13 @@ function setupFullscreen(): void {
     if (isFullscreenActive()) {
       (visualizerSection as HTMLElement).style.width = `${window.innerWidth}px`;
       (visualizerSection as HTMLElement).style.height = `${window.innerHeight}px`;
-      visualizer?.updateSize();
+      const h = barVisible ? getBarHeight() : 0;
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${Math.max(1, window.innerHeight - h)}px`;
     }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => visualizer?.updateSize());
+    });
   });
 
   btn.addEventListener('click', () => {
@@ -361,6 +407,25 @@ function setupLoadNew(): void {
   });
 }
 
+function setupAlbumArtChangeSong(): void {
+  const container = document.getElementById('album-art-container');
+  if (!container) return;
+  const openFilePicker = (): void => {
+    fileInput.value = '';
+    fileInput.click();
+  };
+  container.addEventListener('click', (e) => {
+    e.preventDefault();
+    openFilePicker();
+  });
+  container.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openFilePicker();
+    }
+  });
+}
+
 function setupKeyboard(): void {
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Space' && currentGraph) {
@@ -395,6 +460,7 @@ function applyDecodedBuffer(file: File, audioBuffer: AudioBuffer, metadata: Meta
   updateMetadataUI(metadata, null);
   const controlsApi = initControls(graph, visualizer, file.name, metadata, audioBuffer);
   controlsApi.setCurrentAlbumArtUrl(null);
+  visualizer.setOnClipping(controlsApi.getClippingCallback());
 
   showStatus('Ready to play!', 'success');
 
@@ -522,7 +588,8 @@ async function loadFileViaMediaElement(file: File): Promise<void> {
   updateMetadataUI(metadata, null);
   const controlsApi = initControls(graph, visualizer, file.name, metadata, null);
   controlsApi.setCurrentAlbumArtUrl(null);
-  showStatus('Ready to play (M4A playback mode — export not available).', 'success');
+  visualizer.setOnClipping(controlsApi.getClippingCallback());
+  showStatus('Ready to play (M4A playback mode - export not available).', 'success');
 
   if (metadata && (metadata.artist || metadata.title)) {
     fetchAlbumArt(metadata).then((artUrl) => {

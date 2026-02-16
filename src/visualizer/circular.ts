@@ -1,11 +1,22 @@
 import { DrawContext } from './types';
 import { getColor, getPrimaryColor, toRgba } from './colors';
 
+function getBassLevel(freq: Uint8Array): number {
+  const len = freq.length;
+  const bassEnd = Math.floor(len * 0.08);
+  if (bassEnd <= 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < bassEnd; i++) sum += freq[i] ?? 0;
+  return sum / bassEnd / 255;
+}
+
 export function drawCircular(dc: DrawContext): void {
   const { ctx, width, height, frequencyData } = dc;
   const centerX = width / 2;
   const centerY = height / 2;
-  const radius = Math.min(width, height) * 0.25;
+  const baseRadius = Math.min(width, height) * 0.18;
+  const bass = getBassLevel(frequencyData);
+  const radius = baseRadius * (1 + bass * 0.12);
   const len = frequencyData.length;
   const effectiveLen = dc.frequencyEndIndex != null ? Math.min(dc.frequencyEndIndex, len) : len;
   const barCount = Math.min(effectiveLen, 180);

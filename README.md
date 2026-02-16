@@ -1,7 +1,10 @@
 # LibrePitch
 
+<<<<<<< HEAD
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
+=======
+>>>>>>> 9ec3624d5e11134b8a5626656869fb1a18496470
 Free, open-source audio visualizer and editor. Pitch and speed control, Nightcore-style presets, bass and treble EQ, reverb. Visualize music with multiple styles. Export to WAV or MP3. No sign-up; everything runs in your browser.
 
 **Live:** [librepitch.com](https://librepitch.com)
@@ -40,6 +43,16 @@ npm run build
 ```
 
 Output is in `dist/`. Serve that folder over HTTPS for full Web Audio support.
+
+### Upload blocked by host (ClamAV false positive)
+
+If your host blocks uploads because of `Html.Exploit.Agent-6802786-0`, build **without** minification and upload that `dist/` instead:
+
+```bash
+npm run build:upload
+```
+
+Output is still in `dist/`. The JS files are larger but readable and almost never trigger the false positive. You can [report the false positive to ClamAV](https://www.clamav.net/reports/fp) so signature updates may fix it for minified builds later.
 
 ## License
 

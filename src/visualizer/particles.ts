@@ -42,11 +42,13 @@ interface AudioBands {
 let particles: Particle[] = [];
 let lastWidth = 0;
 let lastHeight = 0;
+let lastResizeCounter = -1;
 
 if (typeof document !== 'undefined') {
   document.addEventListener('fullscreenchange', () => {
     lastWidth = 0;
     lastHeight = 0;
+    lastResizeCounter = -1;
   });
 }
 
@@ -79,7 +81,12 @@ function getAudioBands(freq: Uint8Array): AudioBands {
   return { low, mid, high, overall };
 }
 
-function ensureParticles(width: number, height: number): void {
+function ensureParticles(width: number, height: number, resizeCounter?: number): void {
+  if (resizeCounter != null && resizeCounter !== lastResizeCounter) {
+    lastResizeCounter = resizeCounter;
+    lastWidth = 0;
+    lastHeight = 0;
+  }
   if (particles.length === NUM_PARTICLES && lastWidth === width && lastHeight === height) return;
 
   particles = [];
@@ -111,7 +118,7 @@ export function drawParticles(dc: DrawContext): void {
   const { ctx, width, height, frequencyData } = dc;
   const time = performance.now() / 1000;
 
-  ensureParticles(width, height);
+  ensureParticles(width, height, dc.resizeCounter);
 
   const scale = getViewportScale(width, height);
   const bands = getAudioBands(frequencyData);
