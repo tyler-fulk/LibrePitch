@@ -31,8 +31,8 @@ let progressRafId: number | null = null;
 
 export interface ControlsApi {
   setCurrentAlbumArtUrl(url: string | null): void;
-  setClippingWarning(visible: boolean): void;
-  getClippingCallback(): (visible: boolean) => void;
+  setClippingWarning(visible: boolean, count?: number): void;
+  getClippingCallback(): (visible: boolean, count: number) => void;
 }
 
 export function initControls(
@@ -47,26 +47,23 @@ export function initControls(
     currentAlbumArtUrl = url;
     visualizer.setAlbumArtUrl(url);
   };
-  const clippingWarningEl = document.getElementById('clipping-warning');
-  let clippingCheckEnabled = getCookie(CLIPPING_COOKIE) === '1';
+  const clippingWarningWrapEl = document.getElementById('clipping-warning-wrap');
+  const clippingWarningCountEl = document.getElementById('clipping-warning-count');
+  /* Default to enabled when cookie not set so the warning can show; '0' = explicitly disabled */
+  let clippingCheckEnabled = getCookie(CLIPPING_COOKIE) !== '0';
   const clippingCheckEnableEl = document.getElementById('clipping-check-enable') as HTMLInputElement | null;
   if (clippingCheckEnableEl) clippingCheckEnableEl.checked = clippingCheckEnabled;
-  const setClippingWarning = (visible: boolean) => {
+  const setClippingWarning = (visible: boolean, count = 0) => {
     if (visible && !clippingCheckEnabled) return;
-    if (clippingWarningEl) clippingWarningEl.classList.toggle('hidden', !visible);
+    if (clippingWarningWrapEl) clippingWarningWrapEl.classList.toggle('hidden', !visible);
+    if (clippingWarningCountEl) clippingWarningCountEl.textContent = String(Math.min(count, 9999));
   };
-  function effectsApplied(): boolean {
-    const s = graph.getState();
-    return s.speed !== 1 || s.detune !== 0 || s.bass !== 0 || s.treble !== 0 ||
-      s.lowpass !== 0 || s.highpass !== 0 || s.reverb !== 0 || s.volume !== 1;
-  }
-  const getClippingCallback = (): ((visible: boolean) => void) => {
-    return (visible: boolean) => {
-      if (visible && !effectsApplied()) return;
-      setClippingWarning(visible);
+  const getClippingCallback = (): ((visible: boolean, count: number) => void) => {
+    return (visible: boolean, count: number) => {
+      setClippingWarning(visible, count);
     };
   };
-  setClippingWarning(false);
+  setClippingWarning(false, 0);
   // Abort previous listeners
   if (currentAbort) {
     currentAbort.abort();
@@ -220,6 +217,7 @@ export function initControls(
   highpassSlider.value = '0';
   reverbSlider.value = '0';
   volumeSlider.value = '1';
+  graph.setVolume(1);
   speedValue.textContent = '1.00x';
   pitchValue.textContent = '0 cents';
   bassValue.textContent = '0 dB';
@@ -440,16 +438,16 @@ export function initControls(
 
   function clearClippingWarning(): void {
     visualizer.resetClippingState();
-    setClippingWarning(false);
+    setClippingWarning(false, 0);
   }
 
   clippingCheckEnableEl?.addEventListener('change', () => {
     clippingCheckEnabled = clippingCheckEnableEl.checked;
     setCookie(CLIPPING_COOKIE, clippingCheckEnabled ? '1' : '0', 365);
-    if (!clippingCheckEnabled) setClippingWarning(false);
+    if (!clippingCheckEnabled) setClippingWarning(false, 0);
   }, { signal });
 
-  // Full preset: sets graph and every slider (including volume) so UI and sound stay in sync.
+  // Full preset: sets graph and sliders (volume is independent and persists).
   function applyFullPreset(
     speed: number,
     bass: number,
@@ -457,8 +455,7 @@ export function initControls(
     lowpass: number,
     highpass: number,
     reverb: number,
-    reverbType: 'delay' | 'original',
-    volume: number = 1
+    reverbType: 'delay' | 'original'
   ) {
     clearClippingWarning();
     const detuneClamped = Math.max(PITCH_MIN, Math.min(PITCH_MAX, Math.round(1200 * Math.log2(speed))));
@@ -470,7 +467,6 @@ export function initControls(
     graph.setHighpass(highpass);
     graph.setReverb(reverb);
     graph.setReverbType(reverbType);
-    graph.setVolume(volume);
     speedSlider.value = String(speed);
     pitchSlider.value = String(detuneClamped);
     bassSlider.value = String(bass);
@@ -478,7 +474,6 @@ export function initControls(
     lowpassSlider.value = String(lowpass);
     highpassSlider.value = String(highpass);
     reverbSlider.value = String(reverb);
-    volumeSlider.value = String(volume);
     speedValue.textContent = `${speed.toFixed(2)}x`;
     pitchValue.textContent = `${detuneClamped > 0 ? '+' : ''}${detuneClamped} cents`;
     bassValue.textContent = `${bass > 0 ? '+' : ''}${bass.toFixed(1)} dB`;
@@ -486,7 +481,6 @@ export function initControls(
     lowpassValue.textContent = `${lowpass}%`;
     highpassValue.textContent = `${highpass}%`;
     reverbValue.textContent = `${reverb}%`;
-    volumeValue.textContent = `${Math.round(volume * 100)}%`;
     reverbTypeDelayBtn.classList.toggle('active', reverbType === 'delay');
     reverbTypeOriginalBtn.classList.toggle('active', reverbType === 'original');
     updateTotalTime();
@@ -494,9 +488,9 @@ export function initControls(
     updateVisualizerPlaybackRate();
   }
 
-  // Reset all controls to default. Normal preset and Reset button both use this.
+  // Reset all controls to default. Normal preset and Reset button both use this. Volume is not reset.
   function resetAll() {
-    applyFullPreset(1, 0, 0, 0, 0, 0, 'delay', 1);
+    applyFullPreset(1, 0, 0, 0, 0, 0, 'delay');
   }
 
   presetNightcoreBtn.addEventListener('click', () => {
@@ -533,6 +527,7 @@ export function initControls(
   }, { signal });
   bassSlider.addEventListener('dblclick', (e) => {
     e.preventDefault();
+    clearClippingWarning();
     bassSlider.value = '0';
     graph.setBass(0);
     bassValue.textContent = '0 dB';
@@ -547,6 +542,7 @@ export function initControls(
   }, { signal });
   trebleSlider.addEventListener('dblclick', (e) => {
     e.preventDefault();
+    clearClippingWarning();
     trebleSlider.value = '0';
     graph.setTreble(0);
     trebleValue.textContent = '0 dB';
@@ -561,6 +557,7 @@ export function initControls(
   }, { signal });
   lowpassSlider.addEventListener('dblclick', (e) => {
     e.preventDefault();
+    clearClippingWarning();
     lowpassSlider.value = '0';
     graph.setLowpass(0);
     lowpassValue.textContent = '0%';
@@ -575,6 +572,7 @@ export function initControls(
   }, { signal });
   highpassSlider.addEventListener('dblclick', (e) => {
     e.preventDefault();
+    clearClippingWarning();
     highpassSlider.value = '0';
     graph.setHighpass(0);
     highpassValue.textContent = '0%';
@@ -601,6 +599,7 @@ export function initControls(
   }, { signal });
   reverbSlider.addEventListener('dblclick', (e) => {
     e.preventDefault();
+    clearClippingWarning();
     reverbSlider.value = '0';
     graph.setReverb(0);
     reverbValue.textContent = '0%';

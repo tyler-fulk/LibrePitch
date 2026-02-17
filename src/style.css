@@ -672,12 +672,15 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
 }
 
 /* === Now Playing === */
+.now-playing-row {
+  padding-bottom: 0;
+}
+
 .now-playing {
   display: flex;
   gap: 12px;
   align-items: center;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
+  min-width: 0;
 }
 
 .album-art-container {
@@ -784,18 +787,38 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
   text-overflow: ellipsis;
 }
 
-/* === Transport Controls === */
+/* === Transport Controls (same width as album art, left of progress bar) === */
 .transport-controls {
+  width: 64px;
+  min-width: 64px;
   display: flex;
-  gap: 6px;
-  justify-content: center;
+  gap: 4px;
   align-items: center;
-  margin-bottom: -4px;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.progress-controls-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.progress-controls-row .progress-bar {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Partition below progress bar + time row */
+.progress-bar-block {
+  padding-bottom: 4px;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .play-btn, .stop-btn {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: none;
   cursor: pointer;
@@ -813,15 +836,16 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
 
 .play-btn:hover {
   background: var(--accent-hover);
-  box-shadow: 0 0 12px var(--accent-glow);
+  box-shadow: 0 0 10px var(--accent-glow);
 }
 
 .play-btn svg {
-  width: 15px;
-  height: 15px;
+  width: 11px;
+  height: 11px;
 }
 
 .stop-btn {
+  margin-left: 4px;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
 }
@@ -832,15 +856,39 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
 }
 
 .stop-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
 }
 
-/* === Progress === */
+/* === Volume (above BPM, persists across presets) === */
+.volume-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.volume-section .control-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.volume-section .control-label span:first-child {
+  color: var(--text-primary);
+}
+
+.volume-section .control-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* === Progress (transport left of bar; section above volume) === */
 .progress-section {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  padding: 0;
 }
 
 .progress-bar {
@@ -854,20 +902,21 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
   cursor: pointer;
 }
 
+/* Mix-deck style: vertical rectangle thumb */
 .progress-bar::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
+  width: 10px;
+  height: 20px;
+  border-radius: 2px;
   background: var(--accent);
   cursor: pointer;
   box-shadow: 0 0 6px var(--accent-glow);
 }
 
 .progress-bar::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
+  width: 10px;
+  height: 20px;
+  border-radius: 2px;
   background: var(--accent);
   border: none;
   cursor: pointer;
@@ -875,10 +924,20 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
 
 .time-display {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
   font-size: 0.75rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* Align with progress bar: spacer = transport width (64px) + row gap (12px) so current time is at left edge of bar */
+.time-display-spacer {
+  width: 76px;
+  flex-shrink: 0;
+}
+
+.time-display #total-time {
+  margin-left: auto;
 }
 
 .bpm-calculator {
@@ -887,7 +946,10 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
   gap: 8px;
   font-size: 0.75rem;
   color: var(--text-muted);
-  margin-top: 2px;
+}
+
+.panel-section .bpm-calculator {
+  margin-top: 8px;
 }
 
 .clipping-check-option {
@@ -945,18 +1007,34 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
   opacity: 1;
 }
 
-.clipping-warning {
-  margin-top: 8px;
-  padding: 8px 12px;
-  font-size: 0.75rem;
+.clipping-warning-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
   color: var(--danger);
-  background: rgba(255, 107, 107, 0.12);
-  border: 1px solid rgba(255, 107, 107, 0.35);
-  border-radius: var(--radius);
+  vertical-align: middle;
 }
 
-.clipping-warning.hidden {
+.clipping-warning-wrap.hidden {
   display: none;
+}
+
+.clipping-warning-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.clipping-warning-icon svg {
+  display: block;
+}
+
+.clipping-warning-count {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  min-width: 1.5em;
 }
 
 .bpm-label {
@@ -989,7 +1067,7 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
 .panel-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
 }
 
 .panel-section-title {
@@ -1033,11 +1111,12 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
   cursor: pointer;
 }
 
+/* Mix-deck style: vertical rectangle thumb */
 .slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
+  width: 10px;
+  height: 20px;
+  border-radius: 2px;
   background: var(--accent);
   cursor: pointer;
   transition: box-shadow var(--transition);
@@ -1048,9 +1127,9 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
 }
 
 .slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
+  width: 10px;
+  height: 20px;
+  border-radius: 2px;
   background: var(--accent);
   border: none;
   cursor: pointer;
@@ -1367,15 +1446,15 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
     padding: 16px;
   }
 
-  /* Larger touch targets for mobile */
+  /* Smaller mix-deck thumbs on mobile */
   .slider::-webkit-slider-thumb {
-    width: 24px;
-    height: 24px;
+    width: 8px;
+    height: 16px;
   }
 
   .slider::-moz-range-thumb {
-    width: 24px;
-    height: 24px;
+    width: 8px;
+    height: 16px;
   }
 
   .slider {
@@ -1383,13 +1462,13 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
   }
 
   .progress-bar::-webkit-slider-thumb {
-    width: 24px;
-    height: 24px;
+    width: 8px;
+    height: 16px;
   }
 
   .progress-bar::-moz-range-thumb {
-    width: 24px;
-    height: 24px;
+    width: 8px;
+    height: 16px;
   }
 
   .progress-bar {
@@ -1411,8 +1490,8 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
 
   .play-btn,
   .stop-btn {
-    width: 44px;
-    height: 44px;
+    width: 32px;
+    height: 32px;
   }
 
   .preset-btn--wide {

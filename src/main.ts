@@ -455,6 +455,7 @@ function applyDecodedBuffer(file: File, audioBuffer: AudioBuffer, metadata: Meta
 
   visualizer.setAnalyser(graph.getAnalyser());
   visualizer.setAlbumArtColors([]);
+  visualizer.resetClippingState();
   visualizer.start();
 
   updateMetadataUI(metadata, null);

@@ -34,12 +34,13 @@ export class Visualizer {
   private resizeCounter = 0;
   private playbackRate = 1;
   private albumArtUrl: string | null = null;
-  private onClipping: ((clipping: boolean) => void) | null = null;
+  private onClipping: ((clipping: boolean, count: number) => void) | null = null;
   private clippingFrames = 0;
   private noClipFrames = 0;
   private lastReportedClipping = false;
-  private readonly CLIPPING_THRESHOLD = 0.025; // fraction of samples at hard ceiling/floor to consider clipping
-  private readonly CLIPPING_ON_FRAMES = 6;
+  private clippingInstanceCount = 0;
+  private readonly CLIPPING_THRESHOLD = 0.01; // fraction of samples at 0 or 255 to consider clipping
+  private readonly CLIPPING_ON_FRAMES = 3;   // frames above threshold before reporting
   private readonly CLIPPING_OFF_FRAMES = 10;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -109,15 +110,16 @@ export class Visualizer {
     this.albumArtUrl = url;
   }
 
-  setOnClipping(cb: (clipping: boolean) => void): void {
+  setOnClipping(cb: (clipping: boolean, count: number) => void): void {
     this.onClipping = cb;
   }
 
-  /** Reset clipping state so the warning can be shown again after user clears it. */
+  /** Reset clipping state and count so the warning can be shown again after user clears it. */
   resetClippingState(): void {
     this.clippingFrames = 0;
     this.noClipFrames = 0;
     this.lastReportedClipping = false;
+    this.clippingInstanceCount = 0;
   }
 
   start(): void {
@@ -161,9 +163,10 @@ export class Visualizer {
       if (clipRatio >= this.CLIPPING_THRESHOLD) {
         this.clippingFrames = Math.min(this.CLIPPING_ON_FRAMES, this.clippingFrames + 1);
         this.noClipFrames = 0;
-        if (this.clippingFrames >= this.CLIPPING_ON_FRAMES && !this.lastReportedClipping) {
-          this.lastReportedClipping = true;
-          this.onClipping(true);
+        if (this.clippingFrames >= this.CLIPPING_ON_FRAMES) {
+          if (!this.lastReportedClipping) this.lastReportedClipping = true;
+          this.clippingInstanceCount += 1;
+          this.onClipping(true, this.clippingInstanceCount);
         }
       } else {
         this.noClipFrames = Math.min(this.CLIPPING_OFF_FRAMES, this.noClipFrames + 1);

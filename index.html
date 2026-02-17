@@ -131,60 +131,72 @@
 
       <!-- Right: Controls sidebar -->
       <aside id="controls-panel" class="controls-panel hidden">
-        <!-- Now Playing / Metadata -->
-        <div class="now-playing">
-          <div id="album-art-container" class="album-art-container" title="Change song" role="button" tabindex="0">
-            <div id="album-art-placeholder" class="album-art-placeholder">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <circle cx="12" cy="12" r="10"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
+        <!-- Now Playing -->
+        <div class="now-playing-row">
+          <div class="now-playing">
+            <div id="album-art-container" class="album-art-container" title="Change song" role="button" tabindex="0">
+              <div id="album-art-placeholder" class="album-art-placeholder">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="12" cy="12" r="10"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </div>
+              <img id="album-art" class="album-art hidden" alt="Album art" />
+              <div class="album-art-overlay" aria-hidden="true">
+                <svg class="album-art-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+              </div>
             </div>
-            <img id="album-art" class="album-art hidden" alt="Album art" />
-            <div class="album-art-overlay" aria-hidden="true">
-              <svg class="album-art-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
+            <div class="track-info">
+              <p id="track-title" class="track-title">No track loaded</p>
+              <p id="track-artist" class="track-artist"></p>
+              <p id="track-album" class="track-album"></p>
             </div>
-          </div>
-          <div class="track-info">
-            <p id="track-title" class="track-title">No track loaded</p>
-            <p id="track-artist" class="track-artist"></p>
-            <p id="track-album" class="track-album"></p>
           </div>
         </div>
 
-        <!-- Transport -->
-        <div class="transport-controls">
-          <button id="play-btn" class="play-btn" title="Play/Pause">
-            <svg id="play-icon" viewBox="0 0 24 24" fill="currentColor">
-              <polygon points="5,3 19,12 5,21"/>
-            </svg>
-            <svg id="pause-icon" class="hidden" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="4" width="4" height="16"/>
-              <rect x="14" y="4" width="4" height="16"/>
-            </svg>
-          </button>
-          <button id="stop-btn" class="stop-btn" title="Stop">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="6" width="12" height="12"/>
-            </svg>
-          </button>
-        </div>
-
-        <!-- Progress -->
+        <!-- Progress: transport left, bar right; partition below -->
         <div class="progress-section">
-          <input type="range" id="progress-bar" class="progress-bar" min="0" max="100" value="0" step="0.1" />
-          <div class="time-display">
-            <span id="current-time">0:00</span>
-            <span id="total-time">0:00</span>
+          <div class="progress-bar-block">
+            <div class="progress-controls-row">
+              <div class="transport-controls">
+                <button id="play-btn" class="play-btn" title="Play/Pause">
+                  <svg id="play-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="5,3 19,12 5,21"/>
+                  </svg>
+                  <svg id="pause-icon" class="hidden" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="6" y="4" width="4" height="16"/>
+                    <rect x="14" y="4" width="4" height="16"/>
+                  </svg>
+                </button>
+                <button id="stop-btn" class="stop-btn" title="Stop">
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="6" y="6" width="12" height="12"/>
+                  </svg>
+                </button>
+              </div>
+              <input type="range" id="progress-bar" class="progress-bar" min="0" max="100" value="0" step="0.1" />
+            </div>
+            <div class="time-display">
+              <span class="time-display-spacer" aria-hidden="true"></span>
+              <span id="current-time">0:00</span>
+              <span id="total-time">0:00</span>
+            </div>
           </div>
-          <div class="bpm-calculator">
-            <span class="bpm-label">BPM</span>
-            <span id="bpm-value" class="bpm-value">-</span>
-            <button type="button" id="bpm-detect-btn" class="bpm-tap-btn" title="Detect BPM from audio">Detect</button>
+        </div>
+
+        <!-- Volume -->
+        <div class="panel-section">
+          <div class="panel-section-title">Volume</div>
+          <div class="control-group">
+            <label class="control-label">
+              <span>Level</span>
+              <span id="volume-value" class="control-value">100%</span>
+            </label>
+            <input type="range" id="volume-slider" class="slider" min="0" max="1.5" value="1.0" step="0.01" />
           </div>
           <label class="clipping-check-option">
             <span class="clipping-check-wrap">
@@ -192,27 +204,11 @@
               <span class="clipping-check-mark" aria-hidden="true"></span>
             </span>
             <span>Check for Clipping</span>
+            <span id="clipping-warning-wrap" class="clipping-warning-wrap hidden" role="status" aria-live="polite">
+              <span class="clipping-warning-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/><path d="M12 16h.01"/></svg></span>
+              <span id="clipping-warning-count" class="clipping-warning-count">0</span>
+            </span>
           </label>
-          <div id="clipping-warning" class="clipping-warning hidden" role="status" aria-live="polite">
-            Clipping detected - Alter effects to reduce
-          </div>
-        </div>
-
-        <!-- Presets -->
-        <div class="panel-section">
-          <div class="panel-section-title">Presets</div>
-          <div class="control-group">
-            <div class="preset-grid">
-              <button type="button" class="preset-btn" id="preset-nightcore" title="Faster + higher (1.25×)">Nightcore</button>
-              <button type="button" class="preset-btn preset-btn--wide" id="preset-chopped-screwed" title="Slower + lower (0.85×) with delay reverb">Chopped + Screwed</button>
-              <button type="button" class="preset-btn" id="preset-normal" title="Reset all">Normal</button>
-              <button type="button" class="preset-btn" id="preset-underwater" title="Muffled, other room">Underwater</button>
-              <button type="button" class="preset-btn" id="preset-telephone" title="Tinny, phone filter">Telephone</button>
-              <button type="button" class="preset-btn" id="preset-radio" title="Lo-fi band-pass">Radio</button>
-              <button type="button" class="preset-btn" id="preset-spacious" title="Reverb-heavy">Spacious</button>
-              <button type="button" class="preset-btn" id="preset-vinyl" title="Warm, slight reverb">Vinyl</button>
-            </div>
-          </div>
         </div>
 
         <!-- Playback -->
@@ -231,6 +227,28 @@
               <span id="pitch-value" class="control-value">0 cents</span>
             </label>
             <input type="range" id="pitch-slider" class="slider" min="-1200" max="1200" value="0" step="50" />
+          </div>
+          <div class="bpm-calculator">
+            <span class="bpm-label">BPM</span>
+            <span id="bpm-value" class="bpm-value">-</span>
+            <button type="button" id="bpm-detect-btn" class="bpm-tap-btn" title="Detect BPM from audio">Detect</button>
+          </div>
+        </div>
+
+        <!-- Presets -->
+        <div class="panel-section">
+          <div class="panel-section-title">Presets</div>
+          <div class="control-group">
+            <div class="preset-grid">
+              <button type="button" class="preset-btn" id="preset-nightcore" title="Faster + higher (1.25×)">Nightcore</button>
+              <button type="button" class="preset-btn preset-btn--wide" id="preset-chopped-screwed" title="Slower + lower (0.85×) with delay reverb">Chopped + Screwed</button>
+              <button type="button" class="preset-btn" id="preset-normal" title="Reset all">Normal</button>
+              <button type="button" class="preset-btn" id="preset-underwater" title="Muffled, other room">Underwater</button>
+              <button type="button" class="preset-btn" id="preset-telephone" title="Tinny, phone filter">Telephone</button>
+              <button type="button" class="preset-btn" id="preset-radio" title="Lo-fi band-pass">Radio</button>
+              <button type="button" class="preset-btn" id="preset-spacious" title="Reverb-heavy">Spacious</button>
+              <button type="button" class="preset-btn" id="preset-vinyl" title="Warm, slight reverb">Vinyl</button>
+            </div>
           </div>
         </div>
 
@@ -285,18 +303,6 @@
               <button type="button" class="reverb-type-btn" id="reverb-type-original" data-reverb-type="original" title="Convolution reverb">Convolution</button>
             </div>
             <input type="range" id="reverb-slider" class="slider" min="0" max="100" value="0" step="1" />
-          </div>
-        </div>
-
-        <!-- Output -->
-        <div class="panel-section">
-          <div class="panel-section-title">Output</div>
-          <div class="control-group">
-            <label class="control-label">
-              <span>Volume</span>
-              <span id="volume-value" class="control-value">100%</span>
-            </label>
-            <input type="range" id="volume-slider" class="slider" min="0" max="1.5" value="1.0" step="0.01" />
           </div>
         </div>
 
