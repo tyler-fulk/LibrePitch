@@ -326,11 +326,14 @@ async function encodeMp3(
   }
 }
 
-const ID3V1_MAX_LEN = 30;
-const ID3V1_YEAR_LEN = 4;
+const ID3V1_MAX_BYTES = 30;
+const ID3V1_YEAR_MAX_BYTES = 4;
 
-function truncateForId3v1(s: string, maxLen = ID3V1_MAX_LEN): string {
-  return s.slice(0, maxLen);
+/** Truncate string so its UTF-8 encoded length does not exceed maxBytes (ID3v1 validation uses byte length) */
+function truncateForId3v1(s: string, maxBytes = ID3V1_MAX_BYTES): string {
+  const enc = new TextEncoder();
+  while (s.length > 0 && enc.encode(s).length > maxBytes) s = s.slice(0, -1);
+  return s;
 }
 
 function writeMp3Tags(
@@ -365,13 +368,13 @@ function writeMp3Tags(
     ];
   }
 
-  /* ID3v1 limits: title/artist/album 30 chars, year 4 chars */
+  /* ID3v1 limits: title/artist/album 30 bytes, year 4 bytes (validation uses encoded byte length) */
   const tags = {
     v1: {
       title: truncateForId3v1(title),
       artist: truncateForId3v1(artist),
       album: truncateForId3v1(album),
-      year: truncateForId3v1(year, ID3V1_YEAR_LEN),
+      year: truncateForId3v1(year, ID3V1_YEAR_MAX_BYTES),
       comment: '',
       track: '',
       genre: '',
