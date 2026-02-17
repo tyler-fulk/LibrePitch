@@ -48,6 +48,7 @@ export function triggerDownload(blob: Blob, filename: string): void {
 }
 
 const RENDER_CHUNK_SECONDS = 60;
+const DELAY_REVERB_SINGLE_PASS_MAX_SECONDS = 4 * 60;
 
 async function yieldToMain(): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
@@ -129,6 +130,18 @@ async function renderOffline(
     const duration = effectiveRate > 0 ? buffer.duration / effectiveRate : buffer.duration;
     const sampleRate = buffer.sampleRate;
     const channels = buffer.numberOfChannels;
+
+    const useDelayReverb = state.reverbType === 'delay' && (state.reverb ?? 0) > 0;
+    const useSinglePass = useDelayReverb && duration <= DELAY_REVERB_SINGLE_PASS_MAX_SECONDS;
+
+    if (useSinglePass) {
+      const totalFrames = Math.ceil(duration * sampleRate);
+      const offline = new OfflineAudioContext(channels, totalFrames, sampleRate);
+      const { source } = buildEffectGraph(offline, buffer, state);
+      source.start(0);
+      onProgress?.('Rendering...', 100);
+      return offline.startRendering();
+    }
 
     const chunkStarts: number[] = [];
     for (let t = 0; t < duration; t += RENDER_CHUNK_SECONDS) {
