@@ -128,6 +128,63 @@ a.header-action-btn {
   display: none;
 }
 
+/* === Render overlay (during export) === */
+.render-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  pointer-events: auto;
+}
+
+.render-overlay.hidden {
+  display: none;
+}
+
+.render-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 48px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.render-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: render-spin 0.8s linear infinite;
+}
+
+@keyframes render-spin {
+  to { transform: rotate(360deg); }
+}
+
+.render-status {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.render-progress {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.render-progress.hidden {
+  display: none;
+}
+
 .modal-overlay {
   position: absolute;
   inset: 0;
@@ -1109,6 +1166,7 @@ body.fullscreen-active .visualizer-section.bottom-bar-hidden #visualizer-canvas,
   background: var(--bg-tertiary);
   outline: none;
   cursor: pointer;
+  margin: 8px 0;
 }
 
 /* Mix-deck style: vertical rectangle thumb */

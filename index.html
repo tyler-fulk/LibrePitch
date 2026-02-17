@@ -352,6 +352,15 @@
     </main>
   </div>
 
+  <!-- Render overlay (shown during export) -->
+  <div id="render-overlay" class="render-overlay hidden" role="status" aria-live="polite" aria-busy="true">
+    <div class="render-overlay-content">
+      <div class="render-spinner" aria-hidden="true"></div>
+      <p id="render-status" class="render-status">Rendering...</p>
+      <p id="render-progress" class="render-progress hidden"></p>
+    </div>
+  </div>
+
   <!-- Modals -->
   <div id="modal-privacy" class="modal" role="dialog" aria-labelledby="modal-privacy-title" aria-modal="true" hidden>
     <div class="modal-overlay"></div>

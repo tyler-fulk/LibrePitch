@@ -3,14 +3,17 @@ import { createDelayReverb, createOriginalReverb } from './graph';
 import type { Metadata } from '../metadata/extract';
 import MP3Tag from 'mp3tag.js';
 
+export type RenderProgressCallback = (phase: string, percent?: number) => void;
+
 export async function renderAndDownload(
   buffer: AudioBuffer,
   state: AudioGraphState,
-  filename: string
-): Promise<void> {
-  const rendered = await renderOffline(buffer, state);
-  const wav = encodeWAV(rendered);
-  triggerDownload(wav, filename);
+  filename: string,
+  onProgress?: RenderProgressCallback
+): Promise<Blob> {
+  const rendered = await renderOffline(buffer, state, onProgress);
+  onProgress?.('Encoding WAV...', undefined);
+  return encodeWAV(rendered, onProgress);
 }
 
 export interface AlbumArtForExport {
@@ -23,26 +26,38 @@ export async function renderAndDownloadMp3(
   state: AudioGraphState,
   filename: string,
   metadata: Metadata | null,
-  albumArt?: AlbumArtForExport | null
-): Promise<void> {
-  const rendered = await renderOffline(buffer, state);
-  const mp3Buffer = encodeMp3(rendered);
+  albumArt?: AlbumArtForExport | null,
+  onProgress?: RenderProgressCallback
+): Promise<Blob> {
+  const rendered = await renderOffline(buffer, state, onProgress);
+  onProgress?.('Encoding MP3...', undefined);
+  const mp3Buffer = await encodeMp3(rendered, onProgress);
   const withTags = writeMp3Tags(mp3Buffer, metadata, albumArt ?? null);
-  triggerDownload(new Blob([withTags], { type: 'audio/mpeg' }), filename);
+  return new Blob([withTags], { type: 'audio/mpeg' });
 }
 
-async function renderOffline(
+export function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+const RENDER_CHUNK_SECONDS = 60;
+
+async function yieldToMain(): Promise<void> {
+  await new Promise((r) => setTimeout(r, 0));
+}
+
+function buildEffectGraph(
+  offline: OfflineAudioContext,
   buffer: AudioBuffer,
   state: AudioGraphState
-): Promise<AudioBuffer> {
-  const effectiveRate = state.speed * Math.pow(2, state.detune / 1200);
-  const duration = effectiveRate > 0 ? buffer.duration / effectiveRate : buffer.duration;
-  const sampleRate = buffer.sampleRate;
-  const channels = buffer.numberOfChannels;
-  const totalFrames = Math.ceil(duration * sampleRate);
-
-  const offline = new OfflineAudioContext(channels, totalFrames, sampleRate);
-
+): { source: AudioBufferSourceNode; gain: GainNode } {
   const source = offline.createBufferSource();
   source.buffer = buffer;
   source.playbackRate.value = state.speed;
@@ -101,12 +116,84 @@ async function renderOffline(
   wetGain.connect(gain);
   gain.connect(offline.destination);
 
-  source.start(0);
-
-  return offline.startRendering();
+  return { source, gain };
 }
 
-function encodeWAV(buffer: AudioBuffer): Blob {
+async function renderOffline(
+  buffer: AudioBuffer,
+  state: AudioGraphState,
+  onProgress?: RenderProgressCallback
+): Promise<AudioBuffer> {
+  try {
+    const effectiveRate = state.speed * Math.pow(2, state.detune / 1200);
+    const duration = effectiveRate > 0 ? buffer.duration / effectiveRate : buffer.duration;
+    const sampleRate = buffer.sampleRate;
+    const channels = buffer.numberOfChannels;
+
+    const chunkStarts: number[] = [];
+    for (let t = 0; t < duration; t += RENDER_CHUNK_SECONDS) {
+      chunkStarts.push(t);
+    }
+    if (chunkStarts.length === 0) chunkStarts.push(0);
+
+    const renderedChunks: AudioBuffer[] = [];
+
+    for (let i = 0; i < chunkStarts.length; i++) {
+      const outputStart = chunkStarts[i];
+      const outputEnd = Math.min(outputStart + RENDER_CHUNK_SECONDS, duration);
+      const chunkDuration = outputEnd - outputStart;
+      const sourceOffset = outputStart * effectiveRate;
+      const sourceDuration = chunkDuration * effectiveRate;
+
+      const chunkFrames = Math.ceil(chunkDuration * sampleRate);
+      const offline = new OfflineAudioContext(channels, chunkFrames, sampleRate);
+
+      const { source } = buildEffectGraph(offline, buffer, state);
+      source.start(0, sourceOffset, sourceDuration);
+
+      const chunk = await offline.startRendering();
+      renderedChunks.push(chunk);
+
+      const percent = Math.round(((i + 1) / chunkStarts.length) * 100);
+      onProgress?.('Rendering...', percent);
+      await yieldToMain();
+    }
+
+    return concatenateAudioBuffers(renderedChunks, channels, sampleRate);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('RangeError') || msg.includes('memory') || msg.includes('allocate')) {
+      throw new Error('Render failed: file may be too long or system ran out of memory. Try a shorter clip or fewer effects.');
+    }
+    throw err;
+  }
+}
+
+function concatenateAudioBuffers(
+  buffers: AudioBuffer[],
+  channels: number,
+  sampleRate: number
+): AudioBuffer {
+  const totalLength = buffers.reduce((acc, b) => acc + b.length, 0);
+  const result = new AudioContext().createBuffer(channels, totalLength, sampleRate);
+
+  for (let ch = 0; ch < channels; ch++) {
+    const out = result.getChannelData(ch);
+    let offset = 0;
+    for (const buf of buffers) {
+      out.set(buf.getChannelData(ch), offset);
+      offset += buf.length;
+    }
+  }
+  return result;
+}
+
+const WAV_BLOCK_SAMPLES = 100_000;
+
+async function encodeWAV(
+  buffer: AudioBuffer,
+  onProgress?: RenderProgressCallback
+): Promise<Blob> {
   const channels = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;
   const bitsPerSample = 16;
@@ -142,15 +229,25 @@ function encodeWAV(buffer: AudioBuffer): Blob {
   }
 
   let offset = 44;
-  for (let i = 0; i < totalSamples; i++) {
-    for (let ch = 0; ch < channels; ch++) {
-      let sample = channelData[ch][i];
-      sample = Math.max(-1, Math.min(1, sample));
-      const int16 = sample < 0
-        ? Math.max(-32768, Math.floor(sample * 32768))
-        : Math.min(32767, Math.floor(sample * 32767));
-      view.setInt16(offset, int16, true);
-      offset += 2;
+  let processed = 0;
+  for (let i = 0; i < totalSamples; i += WAV_BLOCK_SAMPLES) {
+    const blockEnd = Math.min(i + WAV_BLOCK_SAMPLES, totalSamples);
+    for (let j = i; j < blockEnd; j++) {
+      for (let ch = 0; ch < channels; ch++) {
+        let sample = channelData[ch][j];
+        sample = Math.max(-1, Math.min(1, sample));
+        const int16 =
+          sample < 0
+            ? Math.max(-32768, Math.floor(sample * 32768))
+            : Math.min(32767, Math.floor(sample * 32767));
+        view.setInt16(offset, int16, true);
+        offset += 2;
+      }
+    }
+    processed = blockEnd;
+    if (processed < totalSamples) {
+      onProgress?.('Encoding WAV...', Math.round((processed / totalSamples) * 100));
+      await yieldToMain();
     }
   }
 
@@ -164,6 +261,7 @@ function writeString(view: DataView, offset: number, str: string): void {
 }
 
 const MP3_CHUNK = 1152;
+const MP3_YIELD_EVERY_CHUNKS = 500;
 
 function floatToInt16(float32: Float32Array): Int16Array {
   const int16 = new Int16Array(float32.length);
@@ -174,35 +272,65 @@ function floatToInt16(float32: Float32Array): Int16Array {
   return int16;
 }
 
-function encodeMp3(buffer: AudioBuffer): ArrayBuffer {
+async function encodeMp3(
+  buffer: AudioBuffer,
+  onProgress?: RenderProgressCallback
+): Promise<ArrayBuffer> {
   const channels = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;
   const left = floatToInt16(buffer.getChannelData(0));
   const right = channels > 1 ? floatToInt16(buffer.getChannelData(1)) : left;
 
-  const lamejs = (window as unknown as { lamejs?: { Mp3Encoder: new (ch: number, sr: number, kbps: number) => { encodeBuffer: (l: Int16Array, r?: Int16Array) => Int8Array; flush: () => Int8Array } } }).lamejs;
+  const lamejs = (window as unknown as {
+    lamejs?: {
+      Mp3Encoder: new (ch: number, sr: number, kbps: number) => {
+        encodeBuffer: (l: Int16Array, r?: Int16Array) => Int8Array;
+        flush: () => Int8Array;
+      };
+    };
+  }).lamejs;
   if (!lamejs?.Mp3Encoder) {
     throw new Error('MP3 export requires lamejs. Reload the page and try again.');
   }
-  const encoder = new lamejs.Mp3Encoder(channels, sampleRate, 192);
-  const chunks: Int8Array[] = [];
-  for (let i = 0; i < left.length; i += MP3_CHUNK) {
-    const leftChunk = left.subarray(i, i + MP3_CHUNK);
-    const rightChunk = right.subarray(i, i + MP3_CHUNK);
-    const mp3buf = encoder.encodeBuffer(leftChunk, rightChunk);
-    if (mp3buf.length > 0) chunks.push(mp3buf);
-  }
-  const flush = encoder.flush();
-  if (flush.length > 0) chunks.push(flush);
 
-  const total = chunks.reduce((acc, c) => acc + c.length, 0);
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const c of chunks) {
-    out.set(c, offset);
-    offset += c.length;
+  try {
+    const encoder = new lamejs.Mp3Encoder(channels, sampleRate, 192);
+    const chunks: Int8Array[] = [];
+    const totalChunks = Math.ceil(left.length / MP3_CHUNK);
+    let chunkCount = 0;
+
+    for (let i = 0; i < left.length; i += MP3_CHUNK) {
+      const leftChunk = left.subarray(i, i + MP3_CHUNK);
+      const rightChunk = right.subarray(i, i + MP3_CHUNK);
+      const mp3buf = encoder.encodeBuffer(leftChunk, rightChunk);
+      if (mp3buf.length > 0) chunks.push(mp3buf);
+      chunkCount++;
+      if (chunkCount % MP3_YIELD_EVERY_CHUNKS === 0) {
+        onProgress?.('Encoding MP3...', Math.round((chunkCount / totalChunks) * 100));
+        await yieldToMain();
+      }
+    }
+    const flush = encoder.flush();
+    if (flush.length > 0) chunks.push(flush);
+
+    const total = chunks.reduce((acc, c) => acc + c.length, 0);
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const c of chunks) {
+      out.set(c, offset);
+      offset += c.length;
+    }
+    return out.buffer;
+  } catch (err) {
+    throw new Error('MP3 encoding failed. The file may be too long. Try exporting as WAV instead.');
   }
-  return out.buffer;
+}
+
+const ID3V1_MAX_LEN = 30;
+const ID3V1_YEAR_LEN = 4;
+
+function truncateForId3v1(s: string, maxLen = ID3V1_MAX_LEN): string {
+  return s.slice(0, maxLen);
 }
 
 function writeMp3Tags(
@@ -237,8 +365,17 @@ function writeMp3Tags(
     ];
   }
 
+  /* ID3v1 limits: title/artist/album 30 chars, year 4 chars */
   const tags = {
-    v1: { title, artist, album, year, comment: '', track: '', genre: '' },
+    v1: {
+      title: truncateForId3v1(title),
+      artist: truncateForId3v1(artist),
+      album: truncateForId3v1(album),
+      year: truncateForId3v1(year, ID3V1_YEAR_LEN),
+      comment: '',
+      track: '',
+      genre: '',
+    },
     v2,
   };
 
@@ -248,15 +385,4 @@ function writeMp3Tags(
     id3v1: { include: true },
     id3v2: { include: true, version: 4 },
   }) as ArrayBuffer;
-}
-
-function triggerDownload(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }

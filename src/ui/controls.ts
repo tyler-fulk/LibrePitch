@@ -119,6 +119,29 @@ export function initControls(
   const downloadMenu = $('download-dropdown-menu');
   const downloadWavItem = $('download-wav-item') as HTMLButtonElement;
   const downloadMp3Item = $('download-mp3-item') as HTMLButtonElement;
+  const renderOverlayEl = document.getElementById('render-overlay');
+  const renderStatusEl = document.getElementById('render-status');
+  const renderProgressEl = document.getElementById('render-progress');
+
+  function showRenderOverlay(status: string, progress?: number): void {
+    if (renderOverlayEl) {
+      renderOverlayEl.classList.remove('hidden');
+      if (renderStatusEl) renderStatusEl.textContent = status;
+      if (renderProgressEl) {
+        if (progress !== undefined) {
+          renderProgressEl.textContent = `${progress}%`;
+          renderProgressEl.classList.remove('hidden');
+        } else {
+          renderProgressEl.textContent = '';
+          renderProgressEl.classList.add('hidden');
+        }
+      }
+    }
+  }
+
+  function hideRenderOverlay(): void {
+    if (renderOverlayEl) renderOverlayEl.classList.add('hidden');
+  }
 
   const canExport = !!(graph as any).__buffer;
   downloadDropdownBtn.disabled = !canExport;
@@ -657,19 +680,24 @@ export function initControls(
     }
     downloadMenu.classList.add('hidden');
     downloadDropdownBtn.disabled = true;
-    downloadDropdownBtn.textContent = 'Rendering...';
+    showRenderOverlay('Rendering...');
 
     try {
-      const { renderAndDownload } = await import('../audio/export');
+      const { renderAndDownload, triggerDownload } = await import('../audio/export');
       const state = graph.getState();
       const baseName = _originalFilename.replace(/\.[^.]+$/, '');
-      await renderAndDownload(buffer, state, `${baseName}_modified.wav`);
+      const onProgress = (phase: string, percent?: number) => showRenderOverlay(phase, percent);
+      const blob = await renderAndDownload(buffer, state, `${baseName}_modified.wav`, onProgress);
+      hideRenderOverlay();
+      triggerDownload(blob, `${baseName}_modified.wav`);
     } catch (err) {
       console.error('Export error:', err);
-      showStatus('Export failed. Please try again.', 'error');
+      const msg = err instanceof Error ? err.message : 'Export failed. Please try again.';
+      showStatus(msg, 'error');
     } finally {
       downloadDropdownBtn.disabled = false;
       setDownloadBtnLabel();
+      hideRenderOverlay();
     }
   }, { signal });
 
@@ -682,11 +710,11 @@ export function initControls(
     }
     downloadMenu.classList.add('hidden');
     downloadDropdownBtn.disabled = true;
-    downloadDropdownBtn.textContent = 'Rendering...';
+    showRenderOverlay('Rendering...');
 
     try {
       const { fetchMetadataFromAPI } = await import('../metadata/api');
-      const { renderAndDownloadMp3 } = await import('../audio/export');
+      const { renderAndDownloadMp3, triggerDownload } = await import('../audio/export');
       const state = graph.getState();
       const baseName = _originalFilename.replace(/\.[^.]+$/, '');
       const hasComplete =
@@ -712,13 +740,18 @@ export function initControls(
           /* ignore */
         }
       }
-      await renderAndDownloadMp3(buffer, state, `${baseName}_modified.mp3`, metadata, albumArt);
+      const onProgress = (phase: string, percent?: number) => showRenderOverlay(phase, percent);
+      const blob = await renderAndDownloadMp3(buffer, state, `${baseName}_modified.mp3`, metadata, albumArt, onProgress);
+      hideRenderOverlay();
+      triggerDownload(blob, `${baseName}_modified.mp3`);
     } catch (err) {
       console.error('Export error:', err);
-      showStatus('Export failed. Please try again.', 'error');
+      const msg = err instanceof Error ? err.message : 'Export failed. Please try again.';
+      showStatus(msg, 'error');
     } finally {
       downloadDropdownBtn.disabled = false;
       setDownloadBtnLabel();
+      hideRenderOverlay();
     }
   }, { signal });
 
