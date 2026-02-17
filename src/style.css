@@ -62,8 +62,22 @@ body {
 
 .app-header-titles {
   display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-header-titles > div {
+  display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.app-header-favicon {
+  height: 2.2em;
+  width: auto;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .app-title {
